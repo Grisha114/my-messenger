@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabase'
+import GroupSettingsModal from './GroupSettingsModal'
 
 function formatTime(ts) {
   if (!ts) return ''
@@ -32,6 +33,8 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, sh
   const [text, setText] = useState('')
   const [sending, setSending] = useState(false)
   const [lightbox, setLightbox] = useState(null)
+  const [showGroupSettings, setShowGroupSettings] = useState(false)
+  const [currentChat, setCurrentChat] = useState(chat)
   const [members, setMembers] = useState({})
   const bottomRef = useRef(null)
   const inputRef = useRef(null)
@@ -39,6 +42,7 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, sh
   const channelRef = useRef(null)
 
   useEffect(() => {
+    setCurrentChat(chat)
     if (!chat) return
     loadMessages()
     loadMembers()
@@ -204,11 +208,14 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, sh
           }
         </div>
         <div className="chat-header-info">
-          <div className="chat-header-name">{headerName}</div>
+          <div className="chat-header-name">{currentChat?.name || headerName}</div>
           <div className={`chat-header-status${otherUser?.online ? ' online' : ''}`}>
             {headerStatus}
           </div>
         </div>
+        {chat?.type === 'group' && (
+          <button className="icon-btn" onClick={() => setShowGroupSettings(true)} title="Настройки группы">⚙️</button>
+        )}
       </div>
 
       <div className="messages-area">
@@ -300,6 +307,19 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, sh
         <div className="lightbox" onClick={() => setLightbox(null)}>
           <img src={lightbox} alt="фото" />
         </div>
+      )}
+
+      {showGroupSettings && (
+        <GroupSettingsModal
+          chat={currentChat}
+          session={session}
+          onClose={() => setShowGroupSettings(false)}
+          onUpdated={(updated) => {
+            if (updated) setCurrentChat(prev => ({ ...prev, ...updated }))
+            else onBack()
+          }}
+          showToast={showToast}
+        />
       )}
     </div>
   )
