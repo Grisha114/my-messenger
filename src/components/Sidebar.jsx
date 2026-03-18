@@ -1,85 +1,94 @@
+import { useState } from 'react'
 import { supabase } from '../supabase'
+import { Avatar, formatSidebarTime } from './helpers.jsx'
 
-function formatTime(ts) {
-  if (!ts) return ''
-  const d = new Date(ts), now = new Date(), diff = now - d
-  if (diff < 86400000) return d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })
-  if (diff < 604800000) return d.toLocaleDateString('ru', { weekday: 'short' })
-  return d.toLocaleDateString('ru', { day: '2-digit', month: '2-digit' })
-}
+export default function Sidebar({ profile, chats, activeChat, onSelect, onNewChat, onProfileClick, onAdminClick, onSettings, onDeleteChat, onPinChat, hidden }) {
+  const [search, setSearch] = useState('')
+  const [ctx, setCtx] = useState(null)
 
-function Avatar({ name, url, online, size = 48 }) {
-  const letter = (name || '?')[0].toUpperCase()
-  const colors = ['#7c3aed','#2563eb','#059669','#dc2626','#d97706','#db2777']
-  const color = colors[letter.charCodeAt(0) % colors.length]
-  return (
-    <div style={{ width: size, height: size, borderRadius: '50%', background: url ? 'transparent' : color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.38, fontWeight: 700, flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
-      {url ? <img src={url} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : letter}
-      {online && <div style={{ position: 'absolute', bottom: 2, right: 2, width: 12, height: 12, background: '#22c55e', borderRadius: '50%', border: '2px solid var(--bg-secondary)' }} />}
-    </div>
-  )
-}
-
-export default function Sidebar({ profile, chats, activeChat, onSelectChat, onNewChat, onProfileClick, onAdminClick, hidden }) {
-  async function handleLogout() {
-    await supabase.from('profiles').update({ online: false }).eq('id', profile.id)
+  async function logout() {
+    await supabase.from('profiles').update({ online:false }).eq('id', profile.id)
     await supabase.auth.signOut()
   }
 
+  function openCtx(e, chat) {
+    e.preventDefault(); e.stopPropagation()
+    setCtx({ chat, x:Math.min(e.clientX, window.innerWidth-200), y:Math.min(e.clientY, window.innerHeight-150) })
+  }
+
+  const filtered = chats
+    .filter(c => c.displayName?.toLowerCase().includes(search.toLowerCase()))
+    .sort((a,b) => (b.pinned?1:0)-(a.pinned?1:0) || new Date(b.lastMsg?.created_at||b.created_at)-new Date(a.lastMsg?.created_at||a.created_at))
+
+  function previewText(c) {
+    if (!c.lastMsg) return 'Нет сообщений'
+    if (c.lastMsg.file_type==='image') return '🖼 Фото'
+    if (c.lastMsg.file_type==='file') return '📎 Файл'
+    return c.lastMsg.content || ''
+  }
+
   return (
-    <div className={`sidebar${hidden ? ' hidden' : ''}`}>
-      <div className="sidebar-header">
-        <span className="sidebar-title">💬 GrishaChat</span>
-        <button className="icon-btn" onClick={onNewChat} title="Новый чат">✏️</button>
-        <button className="icon-btn" onClick={onAdminClick} title="Инвайты">🔑</button>
-      </div>
+    <>
+      <div className={`sidebar${hidden?' hidden':''}`}>
+        <div className="sidebar-head">
+          <span className="logo">💬 GrishaChat</span>
+          <button className="ico-btn" onClick={onNewChat} title="Новый чат">✏️</button>
+          <button className="ico-btn" onClick={onAdminClick} title="Инвайты">🔑</button>
+          <button className="ico-btn" onClick={onSettings} title="Настройки">⚙️</button>
+        </div>
 
-      <div className="chat-list">
-        {chats.length === 0 && (
-          <div className="empty-state">
-            <div className="icon">💬</div>
-            <p>Нет чатов. Нажми ✏️ чтобы начать!</p>
-          </div>
-        )}
+        <div className="search-wrap">
+          <span className="search-icon">🔍</span>
+          <input className="search-inp" placeholder="Поиск..." value={search} onChange={e=>setSearch(e.target.value)}/>
+        </div>
 
-        {chats.map(chat => (
-          <div
-            key={chat.id}
-            className={`chat-item${activeChat?.id === chat.id ? ' active' : ''}`}
-            onClick={() => onSelectChat(chat)}
-          >
-            <Avatar name={chat.displayName} url={chat.displayAvatar} online={chat.isOnline} />
-            <div className="chat-info">
-              <div className="chat-name">{chat.displayName}</div>
-              <div className="chat-preview">
-                {chat.lastMsg
-                  ? chat.lastMsg.file_type === 'image' ? '🖼 Фото'
-                    : chat.lastMsg.file_type === 'file' ? '📎 Файл'
-                    : chat.lastMsg.content || ''
-                  : 'Нет сообщений'}
+        <div className="chat-list">
+          {filtered.length===0 && <div className="empty-hint">{search ? 'Ничего не найдено' : 'Нажми ✏️ чтобы начать'}</div>}
+          {filtered.map(chat => (
+            <div key={chat.id}
+              className={`chat-row${activeChat?.id===chat.id?' active':''}${chat.pinned?' pinned':''}`}
+              onClick={()=>onSelect(chat)}
+              onContextMenu={e=>openCtx(e,chat)}
+            >
+              <Avatar name={chat.displayName} url={chat.displayAvatar} online={chat.isOnline} size={48}/>
+              <div className="chat-row-info">
+                <div className="chat-row-name">{chat.displayName}</div>
+                <div className="chat-row-preview">{previewText(chat)}</div>
+              </div>
+              <div className="chat-row-meta">
+                <span className="chat-row-time">{formatSidebarTime(chat.lastMsg?.created_at)}</span>
+                {chat.unread>0 && <span className="badge">{chat.unread}</span>}
               </div>
             </div>
-            <div className="chat-meta">
-              <span className="chat-time">{formatTime(chat.lastMsg?.created_at)}</span>
-              {chat.unread > 0 && <span className="unread-badge">{chat.unread}</span>}
-            </div>
+          ))}
+        </div>
+
+        <div className="sidebar-foot">
+          <div className="foot-av" onClick={onProfileClick}>
+            <Avatar name={profile.full_name} url={profile.avatar_url} size={38}/>
           </div>
-        ))}
+          <div className="foot-name" onClick={onProfileClick}>
+            <div className="name">{profile.full_name}</div>
+            <div className="status">● В сети</div>
+          </div>
+          <button className="ico-btn" onClick={logout} title="Выйти">🚪</button>
+        </div>
       </div>
 
-      <div className="sidebar-footer">
-        <div className="user-avatar-sm" onClick={onProfileClick}>
-          {profile.avatar_url
-            ? <img src={profile.avatar_url} alt={profile.full_name} />
-            : (profile.full_name || '?')[0].toUpperCase()
-          }
-        </div>
-        <div className="user-info-sm" onClick={onProfileClick}>
-          <div className="user-name-sm">{profile.full_name}</div>
-          <div className="user-status-sm">● В сети</div>
-        </div>
-        <button className="icon-btn" onClick={handleLogout} title="Выйти">🚪</button>
-      </div>
-    </div>
+      {/* Right-click context menu */}
+      {ctx && (
+        <>
+          <div className="ctx-overlay" onClick={()=>setCtx(null)}/>
+          <div className="ctx" style={{left:ctx.x, top:ctx.y}}>
+            <button className="ctx-item" onClick={()=>{onPinChat(ctx.chat.id,!ctx.chat.pinned);setCtx(null)}}>
+              📌 {ctx.chat.pinned ? 'Открепить' : 'Закрепить'}
+            </button>
+            <button className="ctx-item danger" onClick={()=>{onDeleteChat(ctx.chat.id);setCtx(null)}}>
+              🗑 Удалить чат
+            </button>
+          </div>
+        </>
+      )}
+    </>
   )
 }

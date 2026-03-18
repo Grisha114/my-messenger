@@ -1,68 +1,37 @@
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 import { supabase } from '../supabase'
 
 export default function AuthPage() {
   const [mode, setMode] = useState('login')
   const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [inviteCode, setInviteCode] = useState('')
+  const [pw, setPw] = useState('')
+  const [code, setCode] = useState('')
   const [loading, setLoading] = useState(false)
-  const [error, setError] = useState('')
+  const [err, setErr] = useState('')
 
-  async function handleLogin(e) {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-    const { error } = await supabase.auth.signInWithPassword({ email, password })
-    if (error) setError('Неверный email или пароль')
+  // Auto-fill invite code from URL
+  useEffect(() => {
+    const p = new URLSearchParams(window.location.search)
+    if (p.get('invite')) { setCode(p.get('invite')); setMode('register') }
+  }, [])
+
+  async function login(e) {
+    e.preventDefault(); setLoading(true); setErr('')
+    const { error } = await supabase.auth.signInWithPassword({ email, password: pw })
+    if (error) setErr('Неверный email или пароль')
     setLoading(false)
   }
 
-  async function handleRegister(e) {
-    e.preventDefault()
-    setLoading(true)
-    setError('')
-
-    const code = inviteCode.trim().toUpperCase()
-
-    // Check invite code
-    const { data: invite, error: invErr } = await supabase
-      .from('invite_codes')
-      .select('*')
-      .eq('code', code)
-      .single()
-
-    if (invErr || !invite) {
-      setError('Неверный инвайт-код. Попроси у Гриши.')
-      setLoading(false)
-      return
-    }
-
-    if (invite.is_used && invite.max_uses <= invite.uses_count) {
-      setError('Этот инвайт-код уже использован.')
-      setLoading(false)
-      return
-    }
-
-    if (invite.expires_at && new Date(invite.expires_at) < new Date()) {
-      setError('Срок действия инвайт-кода истёк.')
-      setLoading(false)
-      return
-    }
-
-    const { error } = await supabase.auth.signUp({ email, password })
-    if (error) {
-      setError(error.message === 'User already registered' ? 'Этот email уже зарегистрирован.' : error.message)
-      setLoading(false)
-      return
-    }
-
-    // Mark invite as used
-    await supabase.from('invite_codes').update({
-      uses_count: (invite.uses_count || 0) + 1,
-      is_used: true
-    }).eq('code', code)
-
+  async function register(e) {
+    e.preventDefault(); setLoading(true); setErr('')
+    const c = code.trim().toUpperCase()
+    const { data: inv, error: invErr } = await supabase.from('invite_codes').select('*').eq('code', c).single()
+    if (invErr || !inv) { setErr('Неверный инвайт-код'); setLoading(false); return }
+    if (inv.is_used && inv.uses_count >= inv.max_uses) { setErr('Инвайт-код уже использован'); setLoading(false); return }
+    if (inv.expires_at && new Date(inv.expires_at) < new Date()) { setErr('Инвайт-код истёк'); setLoading(false); return }
+    const { error } = await supabase.auth.signUp({ email, password: pw })
+    if (error) { setErr(error.message === 'User already registered' ? 'Email уже занят' : error.message); setLoading(false); return }
+    await supabase.from('invite_codes').update({ uses_count: (inv.uses_count||0)+1, is_used:true }).eq('code', c)
     setLoading(false)
   }
 
@@ -71,64 +40,29 @@ export default function AuthPage() {
       <div className="auth-card">
         <div className="auth-logo">💬</div>
         <h1 className="auth-title">GrishaChat</h1>
-        <p className="auth-subtitle">
-          {mode === 'login' ? 'Войди в свой аккаунт' : 'Регистрация по инвайту'}
-        </p>
-
-        {error && <div className="error-msg">{error}</div>}
-
-        <form onSubmit={mode === 'login' ? handleLogin : handleRegister}>
-          {mode === 'register' && (
-            <div className="form-group">
-              <label className="form-label">Инвайт-код</label>
-              <input
-                className="form-input"
-                type="text"
-                placeholder="XXXXXXXX"
-                value={inviteCode}
-                onChange={e => setInviteCode(e.target.value.toUpperCase())}
-                required
-                style={{ letterSpacing: '3px', textTransform: 'uppercase' }}
-              />
+        <p className="auth-sub">{mode==='login' ? 'Войди в аккаунт' : 'Регистрация по инвайту'}</p>
+        {err && <div className="err">{err}</div>}
+        <form onSubmit={mode==='login' ? login : register}>
+          {mode==='register' && (
+            <div className="f-group">
+              <label className="f-label">Инвайт-код</label>
+              <input className="f-input" value={code} onChange={e=>setCode(e.target.value.toUpperCase())} placeholder="XXXXXXXX" required style={{letterSpacing:3,textTransform:'uppercase'}}/>
             </div>
           )}
-
-          <div className="form-group">
-            <label className="form-label">Email</label>
-            <input
-              className="form-input"
-              type="email"
-              placeholder="you@example.com"
-              value={email}
-              onChange={e => setEmail(e.target.value)}
-              required
-            />
+          <div className="f-group">
+            <label className="f-label">Email</label>
+            <input className="f-input" type="email" value={email} onChange={e=>setEmail(e.target.value)} placeholder="you@email.com" required/>
           </div>
-
-          <div className="form-group">
-            <label className="form-label">Пароль</label>
-            <input
-              className="form-input"
-              type="password"
-              placeholder="••••••••"
-              value={password}
-              onChange={e => setPassword(e.target.value)}
-              required
-              minLength={6}
-            />
+          <div className="f-group">
+            <label className="f-label">Пароль</label>
+            <input className="f-input" type="password" value={pw} onChange={e=>setPw(e.target.value)} placeholder="••••••••" required minLength={6}/>
           </div>
-
           <button className="btn-primary" type="submit" disabled={loading}>
-            {loading ? 'Загрузка...' : mode === 'login' ? 'Войти' : 'Зарегистрироваться'}
+            {loading ? 'Загрузка...' : mode==='login' ? 'Войти' : 'Зарегистрироваться'}
           </button>
         </form>
-
         <div className="auth-switch">
-          {mode === 'login' ? (
-            <>Нет аккаунта? <span onClick={() => { setMode('register'); setError('') }}>Зарегистрироваться</span></>
-          ) : (
-            <>Уже есть аккаунт? <span onClick={() => { setMode('login'); setError('') }}>Войти</span></>
-          )}
+          {mode==='login' ? (<>Нет аккаунта? <span onClick={()=>{setMode('register');setErr('')}}>Зарегистрироваться</span></>) : (<>Есть аккаунт? <span onClick={()=>{setMode('login');setErr('')}}>Войти</span></>)}
         </div>
       </div>
     </div>
