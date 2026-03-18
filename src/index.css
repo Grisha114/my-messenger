@@ -492,3 +492,73 @@ textarea.f-input { resize:vertical; min-height:80px; }
 .paste-preview img { width:48px; height:48px; object-fit:cover; border-radius:8px; }
 .paste-preview-info { flex:1; font-size:13px; color:var(--text2); }
 .paste-preview-close { background:none; border:none; color:var(--text3); font-size:20px; cursor:pointer; }
+
+/* ─── DESKTOP FIXES ─────────────────────── */
+@media (min-width: 769px) {
+  /* On desktop: sidebar + chat always visible side by side */
+  .sidebar { display: flex !important; position: relative !important; }
+  
+  .chat-win.mobile {
+    position: relative !important;
+    transform: none !important;
+    display: flex !important;
+  }
+  .chat-win.mobile:not(.visible) {
+    display: flex !important; /* always show on desktop */
+    transform: none !important;
+  }
+  
+  /* Hide back button on desktop */
+  .back-btn { display: none !important; }
+}
+
+/* ─── NOTIFICATION BANNER ───────────────── */
+.notif-banner {
+  position: fixed; top: 16px; right: 16px; z-index: 500;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 14px; padding: 14px 16px;
+  display: flex; align-items: center; gap: 12px;
+  box-shadow: 0 8px 32px rgba(0,0,0,.5); max-width: 320px;
+  animation: toastIn .3s ease;
+}
+.notif-av { width: 44px; height: 44px; border-radius: 50%; overflow: hidden; flex-shrink: 0; }
+.notif-av img { width: 100%; height: 100%; object-fit: cover; }
+.notif-body { flex: 1; min-width: 0; }
+.notif-name { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
+.notif-text { font-size: 13px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.notif-close { background: none; border: none; color: var(--text3); font-size: 20px; cursor: pointer; padding: 0; flex-shrink: 0; }
+
+/* ─── SETTINGS FULL ─────────────────────── */
+.sett-profile-card {
+  display: flex; align-items: center; gap: 16px;
+  padding: 18px; background: var(--bg3); border-radius: 16px;
+  margin-bottom: 24px; cursor: pointer; transition: background .15s;
+}
+.sett-profile-card:hover { background: var(--bg4); }
+.sett-profile-card .info { flex: 1; min-width: 0; }
+.sett-profile-card .info .pname { font-size: 18px; font-weight: 700; }
+.sett-profile-card .info .pun { font-size: 13px; color: var(--text3); margin-top: 2px; }
+
+.sett-group { margin-bottom: 20px; }
+.sett-group-title { font-size: 11px; font-weight: 700; color: var(--accent2); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; padding: 0 4px; }
+.sett-item {
+  display: flex; align-items: center; gap: 14px;
+  padding: 13px 16px; background: var(--bg3); cursor: pointer;
+  transition: background .12s; user-select: none;
+}
+.sett-item:first-child { border-radius: 14px 14px 0 0; }
+.sett-item:last-child { border-radius: 0 0 14px 14px; }
+.sett-item:only-child { border-radius: 14px; }
+.sett-item + .sett-item { border-top: 1px solid var(--border); }
+.sett-item:hover { background: var(--bg4); }
+.sett-item .si-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
+.sett-item .si-label { flex: 1; font-size: 15px; font-weight: 500; }
+.sett-item .si-val { font-size: 13px; color: var(--text3); }
+.sett-item .si-arrow { color: var(--text3); font-size: 18px; }
+.sett-item.danger .si-label { color: #fca5a5; }
+
+.by-grisha {
+  text-align: center; padding: 24px 0 8px;
+  color: var(--text3); font-size: 13px; line-height: 1.8;
+}
+.by-grisha .heart { color: #f472b6; }
