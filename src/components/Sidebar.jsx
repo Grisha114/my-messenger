@@ -1,11 +1,8 @@
-import { useState } from 'react'
 import { supabase } from '../supabase'
 
 function formatTime(ts) {
   if (!ts) return ''
-  const d = new Date(ts)
-  const now = new Date()
-  const diff = now - d
+  const d = new Date(ts), now = new Date(), diff = now - d
   if (diff < 86400000) return d.toLocaleTimeString('ru', { hour: '2-digit', minute: '2-digit' })
   if (diff < 604800000) return d.toLocaleDateString('ru', { weekday: 'short' })
   return d.toLocaleDateString('ru', { day: '2-digit', month: '2-digit' })
@@ -15,22 +12,15 @@ function Avatar({ name, url, online, size = 48 }) {
   const letter = (name || '?')[0].toUpperCase()
   const colors = ['#7c3aed','#2563eb','#059669','#dc2626','#d97706','#db2777']
   const color = colors[letter.charCodeAt(0) % colors.length]
-
   return (
-    <div className="chat-avatar" style={{ width: size, height: size, background: url ? 'transparent' : color }}>
-      {url ? <img src={url} alt={name} /> : letter}
-      {online && <div className="online-dot" />}
+    <div style={{ width: size, height: size, borderRadius: '50%', background: url ? 'transparent' : color, display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: size * 0.38, fontWeight: 700, flexShrink: 0, overflow: 'hidden', position: 'relative' }}>
+      {url ? <img src={url} alt={name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : letter}
+      {online && <div style={{ position: 'absolute', bottom: 2, right: 2, width: 12, height: 12, background: '#22c55e', borderRadius: '50%', border: '2px solid var(--bg-secondary)' }} />}
     </div>
   )
 }
 
-export default function Sidebar({ profile, chats, activeChat, onSelectChat, onNewChat, onProfileClick, onAdminClick, onRefresh, hidden }) {
-  const [search, setSearch] = useState('')
-
-  const filtered = chats.filter(c =>
-    c.displayName?.toLowerCase().includes(search.toLowerCase())
-  )
-
+export default function Sidebar({ profile, chats, activeChat, onSelectChat, onNewChat, onProfileClick, onAdminClick, hidden }) {
   async function handleLogout() {
     await supabase.from('profiles').update({ online: false }).eq('id', profile.id)
     await supabase.auth.signOut()
@@ -44,48 +34,28 @@ export default function Sidebar({ profile, chats, activeChat, onSelectChat, onNe
         <button className="icon-btn" onClick={onAdminClick} title="Инвайты">🔑</button>
       </div>
 
-      <div className="search-box">
-        <div className="search-wrap">
-          <svg width="16" height="16" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-            <circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>
-          </svg>
-          <input
-            className="search-input"
-            placeholder="Поиск чатов..."
-            value={search}
-            onChange={e => setSearch(e.target.value)}
-          />
-        </div>
-      </div>
-
       <div className="chat-list">
-        {filtered.length === 0 && (
+        {chats.length === 0 && (
           <div className="empty-state">
             <div className="icon">💬</div>
-            <p>{search ? 'Ничего не найдено' : 'Нет чатов. Начни общение!'}</p>
+            <p>Нет чатов. Нажми ✏️ чтобы начать!</p>
           </div>
         )}
 
-        {filtered.map(chat => (
+        {chats.map(chat => (
           <div
             key={chat.id}
             className={`chat-item${activeChat?.id === chat.id ? ' active' : ''}`}
             onClick={() => onSelectChat(chat)}
           >
-            <Avatar
-              name={chat.displayName}
-              url={chat.displayAvatar}
-              online={chat.isOnline}
-            />
+            <Avatar name={chat.displayName} url={chat.displayAvatar} online={chat.isOnline} />
             <div className="chat-info">
               <div className="chat-name">{chat.displayName}</div>
               <div className="chat-preview">
                 {chat.lastMsg
-                  ? chat.lastMsg.file_type === 'image'
-                    ? '🖼 Фото'
-                    : chat.lastMsg.file_type === 'file'
-                      ? '📎 Файл'
-                      : chat.lastMsg.content
+                  ? chat.lastMsg.file_type === 'image' ? '🖼 Фото'
+                    : chat.lastMsg.file_type === 'file' ? '📎 Файл'
+                    : chat.lastMsg.content || ''
                   : 'Нет сообщений'}
               </div>
             </div>
