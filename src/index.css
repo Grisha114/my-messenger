@@ -141,18 +141,18 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-se
 .ctx-item.danger { color:#fca5a5; }
 
 /* Message input */
-.msg-input-area { padding:8px 10px; padding-bottom:max(8px, env(safe-area-inset-bottom)); background:var(--bg2); border-top:1px solid var(--border); display:flex; align-items:flex-end; gap:8px; flex-shrink:0; }
-.msg-input-wrap { flex:1; display:flex; align-items:flex-end; gap:8px; background:var(--bg3); border:1.5px solid var(--border); border-radius:22px; padding:10px 14px; transition:border-color .2s; }
+.msg-input-area { padding:8px 8px; padding-bottom:max(8px, env(safe-area-inset-bottom)); background:var(--bg2); border-top:1px solid var(--border); display:flex; align-items:flex-end; gap:6px; flex-shrink:0; overflow:hidden; }
+.msg-input-wrap { flex:1; min-width:0; display:flex; align-items:flex-end; gap:6px; background:var(--bg3); border:1.5px solid var(--border); border-radius:22px; padding:9px 12px; transition:border-color .2s; overflow:hidden; }
 .msg-input-wrap:focus-within { border-color:var(--accent); }
 .msg-textarea { flex:1; background:none; border:none; outline:none; color:var(--text); font-size:16px; font-family:inherit; resize:none; min-height:22px; max-height:140px; line-height:1.5; -webkit-appearance:none; }
 .msg-textarea::placeholder { color:var(--text3); }
-.attach-btn { background:none; border:none; color:var(--text3); font-size:20px; cursor:pointer; padding:0; flex-shrink:0; transition:color .2s; line-height:1; }
+.attach-btn { background:none; border:none; color:var(--text3); font-size:18px; cursor:pointer; padding:0; flex-shrink:0; transition:color .2s; line-height:1; }
 .attach-btn:hover { color:var(--accent2); }
-.send-btn { width:42px; height:42px; min-width:42px; border-radius:50%; background:var(--sent); border:none; color:#fff; font-size:18px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px var(--accent-glow); transition:all .2s; flex-shrink:0; }
+.send-btn { width:40px; height:40px; min-width:40px; max-width:40px; border-radius:50%; background:var(--sent); border:none; color:#fff; font-size:17px; cursor:pointer; display:flex; align-items:center; justify-content:center; box-shadow:0 4px 14px var(--accent-glow); transition:all .2s; flex-shrink:0; }
 .send-btn:hover { transform:scale(1.08); }
 .send-btn:active { transform:scale(.95); }
 .send-btn:disabled { opacity:.35; cursor:not-allowed; transform:none; }
-.voice-btn { background:none; border:none; color:var(--text3); font-size:20px; cursor:pointer; padding:0; flex-shrink:0; transition:color .2s; }
+.voice-btn { background:none; border:none; color:var(--text3); font-size:18px; cursor:pointer; padding:0; flex-shrink:0; transition:color .2s; }
 .voice-btn.recording { color:var(--red); animation:pulse 1s infinite; }
 @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
 
@@ -377,4 +377,9 @@ textarea.f-input { resize:vertical; min-height:70px; }
   .chat-win.mobile { height:100dvh; height:-webkit-fill-available; }
   .sidebar { height:100dvh; height:-webkit-fill-available; }
   .modal { max-height:85dvh; }
+}
+
+/* ── SWIPE TO CLOSE CHAT (mobile) ── */
+.chat-win.mobile {
+  touch-action: pan-y;
 }

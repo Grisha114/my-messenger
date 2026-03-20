@@ -122,6 +122,9 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
   const didScrollRef = useRef(false)
   const recognitionRef = useRef(null)
   const typingTimer = useRef(null)
+  const swipeChatStartX = useRef(null)
+  const swipeChatStartY = useRef(null)
+  const [swipeChatOffset, setSwipeChatOffset] = useState(0)
 
   useEffect(() => {
     setCurChat(chat)
@@ -380,6 +383,28 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
   }
 
 
+  // Swipe right-to-left to close chat (like Telegram back)
+  function onChatTouchStart(e) {
+    // Only start swipe if touching near left edge or if it's a horizontal gesture
+    swipeChatStartX.current = e.touches[0].clientX
+    swipeChatStartY.current = e.touches[0].clientY
+  }
+  function onChatTouchMove(e) {
+    if (swipeChatStartX.current === null) return
+    const dx = swipeChatStartX.current - e.touches[0].clientX
+    const dy = Math.abs(e.touches[0].clientY - swipeChatStartY.current)
+    // Only if horizontal swipe (dx > dy) and swiping RIGHT (dx < 0 means moving right)
+    if (dy > 30) { swipeChatStartX.current = null; return }
+    // dx < 0 = swipe right = go back
+    const offset = Math.max(0, Math.min(-dx, 120))
+    if (offset > 0) setSwipeChatOffset(offset)
+  }
+  function onChatTouchEnd() {
+    if (swipeChatOffset > 60) onBack()
+    setSwipeChatOffset(0)
+    swipeChatStartX.current = null
+  }
+
   const canDel = m => m.sender_id === session.user.id || myRole === 'owner' || myRole === 'admin'
   const canPin = myRole === 'owner' || myRole === 'admin' || chat?.type === 'direct'
   const canEdit = m => m.sender_id === session.user.id && !m.file_type
@@ -412,7 +437,12 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
   const headerStatus = chat.type === 'direct' ? formatLastSeen(otherUser?.last_seen, online) : `${Object.keys(members).length} участников`
 
   return (
-    <div className={`chat-win mobile${visible ? ' visible' : ''}`}>
+    <div className={`chat-win mobile${visible ? ' visible' : ''}`}
+      style={{ transform: swipeChatOffset > 0 ? `translateX(${swipeChatOffset}px)` : undefined, transition: swipeChatOffset > 0 ? 'none' : 'transform .28s cubic-bezier(.4,0,.2,1)' }}
+      onTouchStart={onChatTouchStart}
+      onTouchMove={onChatTouchMove}
+      onTouchEnd={onChatTouchEnd}
+    >
 
       {/* Header */}
       <div className="chat-head" onClick={() => { if (chat.type === 'direct' && otherUser) setViewUser(otherUser); else if (chat.type === 'group') setShowGrpSettings(true) }}>
