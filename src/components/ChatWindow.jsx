@@ -31,6 +31,61 @@ function renderText(text, members, onMentionClick) {
   })
 }
 
+
+// Forward modal component
+function ForwardModal({ msg, session, showToast, onClose }) {
+  const [chats, setChats] = useState([])
+  const [loading, setLoading] = useState(false)
+
+  useEffect(() => { loadChats() }, [])
+
+  async function loadChats() {
+    const { data: mem } = await supabase.from('chat_members').select('chat_id').eq('user_id', session.user.id)
+    if (!mem?.length) return
+    const ids = mem.map(m => m.chat_id)
+    const { data: cs } = await supabase.from('chats').select('*').in('id', ids)
+    if (!cs) return
+    const enriched = await Promise.all(cs.map(async chat => {
+      const { data: others } = await supabase.from('chat_members').select('profiles(full_name,avatar_url)').eq('chat_id', chat.id).neq('user_id', session.user.id).limit(1)
+      return {
+        ...chat,
+        displayName: chat.type === 'group' ? chat.name : (others?.[0]?.profiles?.full_name || '?'),
+        displayAvatar: chat.type === 'group' ? chat.avatar_url : others?.[0]?.profiles?.avatar_url,
+      }
+    }))
+    setChats(enriched)
+  }
+
+  async function forward(targetChat) {
+    setLoading(true)
+    await supabase.from('messages').insert({
+      chat_id: targetChat.id, sender_id: session.user.id,
+      content: msg.content, file_url: msg.file_url, file_type: msg.file_type,
+      forwarded_from: msg.sender_id, is_read: false, deleted: false
+    })
+    setLoading(false); onClose(); showToast('Переслано ✓')
+  }
+
+  return (
+    <div className="overlay" onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className="modal">
+        <div className="modal-head"><span className="modal-title">↗️ Переслать в...</span><button className="modal-close" onClick={onClose}>×</button></div>
+        <div style={{ maxHeight: 400, overflowY: 'auto' }}>
+          {chats.length === 0 && <div className="empty-hint">Нет чатов</div>}
+          {chats.map(chat => (
+            <div key={chat.id} onClick={() => forward(chat)} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 8px', borderRadius: 10, cursor: 'pointer', transition: 'background .12s' }}
+              onMouseEnter={e => e.currentTarget.style.background = 'var(--bg3)'}
+              onMouseLeave={e => e.currentTarget.style.background = 'transparent'}>
+              <Avatar name={chat.displayName} url={chat.displayAvatar} size={40} />
+              <div style={{ fontWeight: 600, fontSize: 14 }}>{chat.displayName}</div>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}
+
 export default function ChatWindow({ chat, session, profile, visible, onBack, onRefresh, showToast, onViewUser }) {
   const [msgs, setMsgs] = useState([])
   const [text, setText] = useState('')
@@ -173,8 +228,9 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
   }
 
   async function loadPinned() {
-    if (!chat?.pinned_message_id) { setPinnedMsg(null); return }
-    const { data } = await supabase.from('messages').select('*').eq('id', chat.pinned_message_id).single()
+    const pinId = curChat?.pinned_message_id || chat?.pinned_message_id
+    if (!pinId) { setPinnedMsg(null); return }
+    const { data } = await supabase.from('messages').select('*').eq('id', pinId).eq('deleted', false).single()
     setPinnedMsg(data || null)
   }
 
@@ -348,7 +404,7 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
     <div className={`chat-win mobile${visible ? ' visible' : ''}`}>
 
       {/* Header */}
-      <div className="chat-head" onClick={() => { if (chat.type === 'direct' && otherUser) setViewUser(otherUser) }}>
+      <div className="chat-head" onClick={() => { if (chat.type === 'direct' && otherUser) setViewUser(otherUser); else if (chat.type === 'group') setShowGrpSettings(true) }}>
         <button className="back-btn" onClick={e => { e.stopPropagation(); onBack() }}>‹</button>
         <div onClick={e => { if (chat.type === 'group') { e.stopPropagation(); setShowGrpSettings(true) } }}>
           <Avatar name={headerName} url={curChat?.avatar_url || chat.displayAvatar} size={40} online={online} />
@@ -596,20 +652,7 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
       )}
 
       {/* Forward modal */}
-      {forwardMsg && (
-        <div className="overlay" onClick={e => e.target === e.currentTarget && setForwardMsg(null)}>
-          <div className="modal">
-            <div className="modal-head"><span className="modal-title">↗️ Переслать в...</span><button className="modal-close" onClick={() => setForwardMsg(null)}>×</button></div>
-            <div className="forward-list">
-              {/* Will be populated from parent - for now show simple list */}
-              <div className="empty-hint" style={{ padding: 20 }}>
-                <p style={{ marginBottom: 12 }}>Сообщение будет переслано</p>
-                <p style={{ fontSize: 13, color: 'var(--text3)' }}>Функция пересылки активна — выбери чат</p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
+      {forwardMsg && <ForwardModal msg={forwardMsg} session={session} onClose={() => setForwardMsg(null)} showToast={showToast}/>}
 
       {/* Input */}
       <div className="msg-input-area">

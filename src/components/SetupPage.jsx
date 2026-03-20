@@ -46,7 +46,7 @@ export default function SetupPage({ session, onDone }) {
           <input id="av-pick" type="file" accept="image/*" style={{display:'none'}} onChange={pickAvatar}/>
           <div className="f-group">
             <label className="f-label">Username (@)</label>
-            <input className="f-input" placeholder="grisha114" value={username} onChange={e=>setUsername(e.target.value)} required/>
+            <input className="f-input" placeholder="твой_username" value={username} onChange={e=>setUsername(e.target.value)} required/>
           </div>
           <div className="f-group">
             <label className="f-label">Имя</label>

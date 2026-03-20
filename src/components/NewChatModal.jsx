@@ -1,6 +1,6 @@
 import { useState } from 'react'
 import { supabase } from '../supabase'
-import { Avatar } from './helpers.jsx'
+import { Avatar, formatLastSeen } from './helpers.jsx'
 
 export default function NewChatModal({ session, profile, onClose, onCreated, showToast }) {
   const [tab, setTab] = useState('direct')
@@ -13,7 +13,7 @@ export default function NewChatModal({ session, profile, onClose, onCreated, sho
   async function search(v) {
     setQ(v)
     if (v.length<2) { setResults([]); return }
-    const { data } = await supabase.from('profiles').select('id,full_name,username,avatar_url,online').neq('id',session.user.id).or(`username.ilike.%${v}%,full_name.ilike.%${v}%`).limit(10)
+    const { data } = await supabase.from('profiles').select('id,full_name,username,avatar_url,online,last_seen').neq('id',session.user.id).or(`username.ilike.%${v}%,full_name.ilike.%${v}%`).limit(10)
     setResults(data||[])
   }
 
