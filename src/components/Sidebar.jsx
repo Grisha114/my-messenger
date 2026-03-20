@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { supabase } from '../supabase'
 import { Avatar, formatSidebarTime } from './helpers.jsx'
 
-export default function Sidebar({ profile, chats, activeChat, onSelect, onNewChat, onProfileClick, onAdminClick, onSettings, onDeleteChat, onPinChat, onFavorites, hidden }) {
+export default function Sidebar({ profile, chats, activeChat, onSelect, onNewChat, onProfileClick, onAdminClick, onSettings, onDeleteChat, onPinChat, onFavorites, onSuggestions, hidden }) {
   const [search, setSearch] = useState('')
   const [ctx, setCtx] = useState(null)
   const [hoverPreview, setHoverPreview] = useState(null) // { chat, previewMsgs }
@@ -62,6 +62,7 @@ export default function Sidebar({ profile, chats, activeChat, onSelect, onNewCha
         <div className="sidebar-head">
           <span className="logo">💬 GrishaChat</span>
           <button className="ico-btn" onClick={onFavorites} title="Избранное">⭐</button>
+          <button className="ico-btn" onClick={onSuggestions} title="Предложения">💡</button>
           <button className="ico-btn" onClick={onNewChat} title="Новый чат">✏️</button>
           <button className="ico-btn" onClick={onAdminClick} title="Инвайты">🔑</button>
           <button className="ico-btn" onClick={onSettings} title="Настройки">⚙️</button>

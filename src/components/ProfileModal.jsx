@@ -349,6 +349,7 @@ export function SettingsModal({ profile, session, onClose, onUpdate, showToast, 
                 <Row icon="📲" label="Установить приложение" onClick={()=>setTab('install')}/>
                 <Row icon="📋" label="История обновлений" onClick={()=>setTab('changelog')}/>
                 <Row icon="ℹ️" label="О приложении" onClick={()=>setTab('about')}/>
+                <Row icon="📝" label="Помощник" onClick={()=>setTab('exam')}/>
               </div>
             </div>
 
@@ -480,6 +481,45 @@ export function SettingsModal({ profile, session, onClose, onUpdate, showToast, 
                 <div className="changelog-entry">{cl.entries.join('\n')}</div>
               </div>
             ))}
+          </div>
+        )}
+
+        {/* EXAM HELPER - hidden feature */}
+        {tab==='exam'&&(
+          <div>
+            <div style={{textAlign:'center',fontSize:48,marginBottom:12}}>📝</div>
+            <h3 style={{textAlign:'center',marginBottom:8}}>Помощник</h3>
+            <p style={{textAlign:'center',fontSize:13,color:'var(--text3)',marginBottom:20}}>Инструменты для учёбы</p>
+
+            <div style={{background:'var(--bg3)',borderRadius:14,padding:16,marginBottom:12}}>
+              <div style={{fontWeight:700,marginBottom:8}}>🎙 Голосовой диктант</div>
+              <div style={{fontSize:13,color:'var(--text2)',lineHeight:1.8}}>
+                В чате нажми 🎙 — говори, текст вводится автоматически.<br/>
+                Работает в Chrome и Edge (Android, ПК).<br/>
+                На iPhone — в Safari через голосовую клавиатуру.
+              </div>
+            </div>
+
+            <div style={{background:'var(--bg3)',borderRadius:14,padding:16,marginBottom:12}}>
+              <div style={{fontWeight:700,marginBottom:8}}>📤 Быстрая отправка</div>
+              <div style={{fontSize:13,color:'var(--text2)',lineHeight:1.8}}>
+                Ctrl+Enter — отправить сообщение быстро.<br/>
+                Enter — новая строка (можно писать несколько строк).<br/>
+                Ctrl+V — вставить скопированное фото прямо в чат.
+              </div>
+            </div>
+
+            <div style={{background:'var(--bg3)',borderRadius:14,padding:16,marginBottom:12}}>
+              <div style={{fontWeight:700,marginBottom:8}}>🔍 Поиск в чате</div>
+              <div style={{fontSize:13,color:'var(--text2)',lineHeight:1.8}}>
+                В чате нажми 🔍 — поиск по всем сообщениям.<br/>
+                Находит любое слово или фразу.
+              </div>
+            </div>
+
+            <div style={{background:'rgba(239,68,68,.08)',border:'1px solid rgba(239,68,68,.15)',borderRadius:12,padding:12,fontSize:12,color:'var(--text3)'}}>
+              Этот раздел не рекламируется — только для своих 🤫
+            </div>
           </div>
         )}
 

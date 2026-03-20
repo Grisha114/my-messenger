@@ -66,7 +66,7 @@ export default function NewChatModal({ session, profile, onClose, onCreated, sho
 
         {results.map(user=>(
           <div key={user.id} className="user-row">
-            <Avatar name={user.full_name} url={user.avatar_url} size={40} online={user.online}/>
+            <Avatar name={user.full_name} url={user.avatar_url} size={40} online={!!(user.online&&user.last_seen&&(Date.now()-new Date(user.last_seen))<180000)}/>
             <div className="user-row-info"><div className="user-row-name">{user.full_name}</div><div className="user-row-un">@{user.username}</div></div>
             {tab==='direct'
               ? <button className="btn-sm btn-acc" onClick={()=>startDirect(user)} disabled={loading}>Написать</button>

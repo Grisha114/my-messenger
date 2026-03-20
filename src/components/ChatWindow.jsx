@@ -110,6 +110,8 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
   const [blockedIds, setBlockedIds] = useState([])
   const [isRecording, setIsRecording] = useState(false)
   const [typingUsers, setTypingUsers] = useState([])
+  const [swipeOffset, setSwipeOffset] = useState({})
+  const swipeStartX = useRef({})
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [emojiCat, setEmojiCat] = useState('😊')
   const [readsDetail, setReadsDetail] = useState(null) // msgId to show reads popup
@@ -228,10 +230,14 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
   }
 
   async function loadPinned() {
-    const pinId = curChat?.pinned_message_id || chat?.pinned_message_id
+    // Always fetch fresh from DB to avoid stale prop
+    const { data: chatRow } = await supabase.from('chats').select('pinned_message_id').eq('id', chat.id).single()
+    const pinId = chatRow?.pinned_message_id
     if (!pinId) { setPinnedMsg(null); return }
-    const { data } = await supabase.from('messages').select('*').eq('id', pinId).eq('deleted', false).single()
-    setPinnedMsg(data || null)
+    const { data: msg } = await supabase.from('messages').select('*').eq('id', pinId).single()
+    if (!msg || msg.deleted) { setPinnedMsg(null); return }
+    setPinnedMsg(msg)
+    setCurChat(p => ({ ...p, pinned_message_id: pinId }))
   }
 
   async function markRead() {
@@ -348,14 +354,20 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
   function onMsgTouchStart(e, msg) {
     longPressTimer.current = setTimeout(() => {
       const touch = e.touches[0]
-      setCtx({ msg, x: Math.min(touch.clientX, window.innerWidth - 220), y: Math.min(touch.clientY - 10, window.innerHeight - 320) })
+      const menuH = 330, menuW = 220
+      const x = Math.max(8, Math.min(touch.clientX - menuW/2, window.innerWidth - menuW - 8))
+      const y = Math.max(8, Math.min(touch.clientY - menuH - 20, window.innerHeight - menuH - 8))
+      setCtx({ msg, x, y })
     }, 450)
   }
   function onMsgTouchEnd() { clearTimeout(longPressTimer.current) }
 
   function onMsgRightClick(e, msg) {
     e.preventDefault(); e.stopPropagation()
-    setCtx({ msg, x: Math.min(e.clientX, window.innerWidth - 220), y: Math.min(e.clientY, window.innerHeight - 320) })
+    const menuH = 330, menuW = 220
+    const x = Math.max(8, Math.min(e.clientX, window.innerWidth - menuW - 8))
+    const y = Math.max(8, Math.min(e.clientY, window.innerHeight - menuH - 8))
+    setCtx({ msg, x, y })
   }
 
   function onKeyDown(e) {
@@ -368,6 +380,24 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
     const el = e.target
     setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 150)
   }
+
+  function onSwipeStart(e, msgId) {
+    if (e.touches.length !== 1) return
+    swipeStartX.current[msgId] = e.touches[0].clientX
+  }
+  function onSwipeMove(e, msg) {
+    const sx = swipeStartX.current[msg.id]
+    if (sx === undefined) return
+    const dx = Math.max(0, Math.min(e.touches[0].clientX - sx, 72))
+    if (dx > 4) setSwipeOffset(p => ({ ...p, [msg.id]: dx }))
+  }
+  function onSwipeEnd(e, msg) {
+    const off = swipeOffset[msg.id] || 0
+    if (off > 48) { setReplyTo(msg); taRef.current?.focus() }
+    setSwipeOffset(p => ({ ...p, [msg.id]: 0 }))
+    delete swipeStartX.current[msg.id]
+  }
+
 
   const canDel = m => m.sender_id === session.user.id || myRole === 'owner' || myRole === 'admin'
   const canPin = myRole === 'owner' || myRole === 'admin' || chat?.type === 'direct'
@@ -482,7 +512,11 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
 
           return (
             <div key={item.id} className={`msg-row${sent ? ' s' : ' r'}${isLast ? ' gap' : ''}`}>
-              <div className="msg-inner">
+              <div className="msg-inner"
+                style={{ transform:`translateX(${swipeOffset[item.id]||0}px)`, transition:(swipeOffset[item.id]||0)>2?'none':'transform .2s ease' }}
+                onTouchStart={e=>onSwipeStart(e,item.id)}
+                onTouchMove={e=>onSwipeMove(e,item)}
+                onTouchEnd={e=>onSwipeEnd(e,item)}>
                 {!sent && (
                   isLast
                     ? <div style={{ flexShrink: 0, alignSelf: 'flex-end', cursor: 'pointer' }} onClick={() => sender && sender.id !== session.user.id && setViewUser(sender)}>

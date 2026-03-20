@@ -180,6 +180,40 @@ export default function MainPage({ session, profile, onProfileUpdate }) {
     openChat({ ...chat, displayName: '⭐ Избранное', type: 'direct', myRole: 'owner' })
   }
 
+  // Suggestion bot - sends message to Grisha's account
+  async function openSuggestionBot() {
+    // Find or create suggestions chat
+    const existing = chats.find(c => c.is_suggestions)
+    if (existing) { openChat(existing); return }
+
+    // Find @grisha profile
+    const { data: grisha } = await supabase.from('profiles').select('*').eq('username', 'grisha').single()
+    
+    const { data: chat } = await supabase.from('chats').insert({
+      type: 'direct',
+      name: '💡 Предложения',
+      created_by: session.user.id,
+      is_suggestions: true
+    }).select().single()
+
+    const members = [{ chat_id: chat.id, user_id: session.user.id, role: 'member' }]
+    if (grisha && grisha.id !== session.user.id) {
+      members.push({ chat_id: chat.id, user_id: grisha.id, role: 'member' })
+    }
+    await supabase.from('chat_members').insert(members)
+
+    // Send welcome message
+    await supabase.from('messages').insert({
+      chat_id: chat.id, sender_id: session.user.id,
+      content: '👋 Привет! Это чат для предложений по улучшению GrishaChat.
+Пиши свои идеи — Гриша их увидит!',
+      is_read: false, deleted: false
+    })
+
+    loadChats()
+    openChat({ ...chat, displayName: '💡 Предложения', type: 'direct', otherUser: grisha })
+  }
+
   return (
     <div className="app">
       <Sidebar
@@ -190,6 +224,7 @@ export default function MainPage({ session, profile, onProfileUpdate }) {
         onSettings={() => setModal('settings')}
         onDeleteChat={deleteChat} onPinChat={pinChat}
         onFavorites={createFavorites}
+        onSuggestions={openSuggestionBot}
         hidden={showChat}
       />
       <ChatWindow
