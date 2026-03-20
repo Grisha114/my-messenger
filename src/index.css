@@ -493,72 +493,93 @@ textarea.f-input { resize:vertical; min-height:80px; }
 .paste-preview-info { flex:1; font-size:13px; color:var(--text2); }
 .paste-preview-close { background:none; border:none; color:var(--text3); font-size:20px; cursor:pointer; }
 
-/* ─── DESKTOP FIXES ─────────────────────── */
+
+/* ─── ICON FIX ───────────────────────────── */
+.sidebar-head {
+  height: var(--header-h); padding: 0 12px;
+  display: flex; align-items: center; gap: 6px;
+  border-bottom: 1px solid var(--border); flex-shrink: 0;
+}
+.sidebar-head .logo {
+  font-size: 17px; font-weight: 800; flex: 1; white-space: nowrap;
+  background: linear-gradient(135deg,#5b6ef5,#a78bfa);
+  -webkit-background-clip: text; -webkit-text-fill-color: transparent;
+}
+.sidebar-head .ico-btn { width: 32px; height: 32px; font-size: 15px; flex-shrink: 0; }
+
+/* ─── CHAT HOVER PREVIEW ─────────────────── */
+.chat-row { position: relative; }
+.chat-preview-tooltip {
+  position: absolute; left: calc(var(--sidebar) + 4px); top: 0;
+  background: var(--bg3); border: 1px solid var(--border);
+  border-radius: 14px; padding: 14px 16px; min-width: 260px; max-width: 340px;
+  box-shadow: 0 12px 40px rgba(0,0,0,.5); z-index: 80;
+  pointer-events: none; animation: ctxIn .15s ease;
+}
+.chat-preview-tooltip .pt-name { font-weight: 700; font-size: 15px; margin-bottom: 6px; }
+.chat-preview-tooltip .pt-msgs { display: flex; flex-direction: column; gap: 4px; }
+.chat-preview-tooltip .pt-msg { font-size: 13px; color: var(--text2); line-height: 1.4; }
+.chat-preview-tooltip .pt-msg span { color: var(--text); font-weight: 500; }
+
+/* ─── VOICE INPUT ────────────────────────── */
+.voice-btn { background: none; border: none; color: var(--text3); font-size: 20px; cursor: pointer; padding: 0; flex-shrink: 0; transition: color .2s; }
+.voice-btn.recording { color: var(--red); animation: pulse 1s infinite; }
+.voice-btn:hover { color: var(--accent2); }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
+
+/* ─── READ RECEIPTS ──────────────────────── */
+.reads-row { display: flex; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+.reads-av { width: 18px; height: 18px; border-radius: 50%; overflow: hidden; cursor: pointer; }
+.reads-av img { width: 100%; height: 100%; object-fit: cover; }
+.reads-av-ph { width: 18px; height: 18px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 700; }
+
+/* ─── GROUP SETTINGS FULL ────────────────── */
+.grp-banner {
+  width: 100%; height: 120px; background: linear-gradient(135deg,#1e2638,#2a1f4a);
+  border-radius: 14px; margin-bottom: 16px; display: flex; align-items: center;
+  justify-content: center; position: relative; overflow: hidden; cursor: pointer;
+}
+.grp-banner::before { content:''; position: absolute; inset: 0; background: radial-gradient(circle at 50% 50%, rgba(91,110,245,.3) 0%, transparent 70%); }
+.grp-stat { display: flex; gap: 24px; justify-content: center; margin-bottom: 20px; }
+.grp-stat-item { text-align: center; }
+.grp-stat-num { font-size: 22px; font-weight: 800; color: var(--accent2); }
+.grp-stat-label { font-size: 11px; color: var(--text3); text-transform: uppercase; letter-spacing: .5px; }
+
+/* ─── TYPING INDICATOR ───────────────────── */
+.typing-wrap { display: flex; align-items: center; gap: 6px; padding: 4px 0 8px; }
+.typing-dots { display: flex; gap: 3px; }
+.typing-dot { width: 6px; height: 6px; background: var(--text3); border-radius: 50%; animation: typingBounce 1.2s infinite; }
+.typing-dot:nth-child(2) { animation-delay: .2s; }
+.typing-dot:nth-child(3) { animation-delay: .4s; }
+@keyframes typingBounce { 0%,60%,100%{transform:translateY(0)} 30%{transform:translateY(-5px)} }
+.typing-text { font-size: 13px; color: var(--text3); font-style: italic; }
+
+/* ─── MENTION ────────────────────────────── */
+.mention { color: var(--accent2); font-weight: 600; cursor: pointer; }
+.mention:hover { text-decoration: underline; }
+
+/* ─── FORWARD MODAL ──────────────────────── */
+.forward-list { max-height: 300px; overflow-y: auto; }
+.forward-item { display: flex; align-items: center; gap: 12px; padding: 9px 0; border-bottom: 1px solid var(--border); cursor: pointer; transition: background .12s; border-radius: 8px; padding: 8px; }
+.forward-item:hover { background: var(--bg3); }
+.forward-item.selected { background: rgba(91,110,245,.15); }
+
+/* ─── EMOJI PICKER ───────────────────────── */
+.emoji-picker { position: absolute; bottom: 60px; left: 14px; background: var(--bg3); border: 1px solid var(--border); border-radius: 16px; padding: 12px; z-index: 50; box-shadow: 0 8px 32px rgba(0,0,0,.4); width: 300px; animation: ctxIn .15s ease; }
+.emoji-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; max-height: 200px; overflow-y: auto; }
+.emoji-grid button { font-size: 22px; background: none; border: none; cursor: pointer; padding: 4px; border-radius: 6px; transition: background .1s; }
+.emoji-grid button:hover { background: var(--bg4); }
+
+/* ─── SMOOTH TRANSITIONS ─────────────────── */
+.bubble { transition: opacity .15s; }
+.bubble:active { opacity: .8; }
+.chat-row { transition: background .12s, transform .1s; }
+
+/* ─── DESKTOP FIXES (ensure sidebar+chat layout) ── */
 @media (min-width: 769px) {
-  /* On desktop: sidebar + chat always visible side by side */
-  .sidebar { display: flex !important; position: relative !important; }
-  
-  .chat-win.mobile {
-    position: relative !important;
-    transform: none !important;
-    display: flex !important;
-  }
-  .chat-win.mobile:not(.visible) {
-    display: flex !important; /* always show on desktop */
-    transform: none !important;
-  }
-  
-  /* Hide back button on desktop */
+  .app { display: flex; }
+  .sidebar { display: flex !important; position: relative !important; transform: none !important; }
+  .chat-win.mobile { position: relative !important; transform: none !important; display: flex !important; }
+  .chat-win.mobile:not(.visible) { display: flex !important; }
   .back-btn { display: none !important; }
 }
-
-/* ─── NOTIFICATION BANNER ───────────────── */
-.notif-banner {
-  position: fixed; top: 16px; right: 16px; z-index: 500;
-  background: var(--bg3); border: 1px solid var(--border);
-  border-radius: 14px; padding: 14px 16px;
-  display: flex; align-items: center; gap: 12px;
-  box-shadow: 0 8px 32px rgba(0,0,0,.5); max-width: 320px;
-  animation: toastIn .3s ease;
-}
-.notif-av { width: 44px; height: 44px; border-radius: 50%; overflow: hidden; flex-shrink: 0; }
-.notif-av img { width: 100%; height: 100%; object-fit: cover; }
-.notif-body { flex: 1; min-width: 0; }
-.notif-name { font-weight: 700; font-size: 14px; margin-bottom: 2px; }
-.notif-text { font-size: 13px; color: var(--text2); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.notif-close { background: none; border: none; color: var(--text3); font-size: 20px; cursor: pointer; padding: 0; flex-shrink: 0; }
-
-/* ─── SETTINGS FULL ─────────────────────── */
-.sett-profile-card {
-  display: flex; align-items: center; gap: 16px;
-  padding: 18px; background: var(--bg3); border-radius: 16px;
-  margin-bottom: 24px; cursor: pointer; transition: background .15s;
-}
-.sett-profile-card:hover { background: var(--bg4); }
-.sett-profile-card .info { flex: 1; min-width: 0; }
-.sett-profile-card .info .pname { font-size: 18px; font-weight: 700; }
-.sett-profile-card .info .pun { font-size: 13px; color: var(--text3); margin-top: 2px; }
-
-.sett-group { margin-bottom: 20px; }
-.sett-group-title { font-size: 11px; font-weight: 700; color: var(--accent2); text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; padding: 0 4px; }
-.sett-item {
-  display: flex; align-items: center; gap: 14px;
-  padding: 13px 16px; background: var(--bg3); cursor: pointer;
-  transition: background .12s; user-select: none;
-}
-.sett-item:first-child { border-radius: 14px 14px 0 0; }
-.sett-item:last-child { border-radius: 0 0 14px 14px; }
-.sett-item:only-child { border-radius: 14px; }
-.sett-item + .sett-item { border-top: 1px solid var(--border); }
-.sett-item:hover { background: var(--bg4); }
-.sett-item .si-icon { width: 36px; height: 36px; border-radius: 10px; display: flex; align-items: center; justify-content: center; font-size: 18px; flex-shrink: 0; }
-.sett-item .si-label { flex: 1; font-size: 15px; font-weight: 500; }
-.sett-item .si-val { font-size: 13px; color: var(--text3); }
-.sett-item .si-arrow { color: var(--text3); font-size: 18px; }
-.sett-item.danger .si-label { color: #fca5a5; }
-
-.by-grisha {
-  text-align: center; padding: 24px 0 8px;
-  color: var(--text3); font-size: 13px; line-height: 1.8;
-}
-.by-grisha .heart { color: #f472b6; }

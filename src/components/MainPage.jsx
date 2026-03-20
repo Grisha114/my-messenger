@@ -140,13 +140,26 @@ export default function MainPage({ session, profile, onProfileUpdate }) {
   function openChat(chat) { setActiveChat(chat); setShowChat(true) }
   function closeChat() { setShowChat(false); setTimeout(() => setActiveChat(null), 300); loadChats() }
 
-  // Delete = leave chat (remove from chat_members permanently)
+  // Delete chat: owner deletes fully, others just leave
   async function deleteChat(chatId) {
-    const { error } = await supabase.from('chat_members').delete().eq('chat_id', chatId).eq('user_id', session.user.id)
-    if (error) { showToast('Ошибка удаления'); return }
+    const chat = chats.find(c => c.id === chatId)
+    const isOwner = chat?.owner_id === session.user.id || chat?.myRole === 'owner' || chat?.created_by === session.user.id
+
+    if (isOwner && chat?.type === 'group') {
+      // Owner: fully delete the chat
+      const { error } = await supabase.from('chats').delete().eq('id', chatId)
+      if (error) {
+        // Fallback: just leave
+        await supabase.from('chat_members').delete().eq('chat_id', chatId).eq('user_id', session.user.id)
+      }
+    } else {
+      // Non-owner: just leave (remove self from members)
+      await supabase.from('chat_members').delete().eq('chat_id', chatId).eq('user_id', session.user.id)
+    }
+
     setChats(prev => prev.filter(c => c.id !== chatId))
     if (activeChat?.id === chatId) closeChat()
-    showToast('Чат удалён')
+    showToast(isOwner && chat?.type === 'group' ? 'Группа удалена' : 'Чат удалён')
   }
 
   function pinChat(chatId, pinned) {

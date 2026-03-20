@@ -1,16 +1,34 @@
-import { useState, useEffect, useRef, useCallback } from 'react'
+import { useState, useEffect, useRef } from 'react'
 import { supabase } from '../supabase'
 import GroupSettingsModal from './GroupSettingsModal'
 import { UserProfileModal } from './ProfileModal'
 import { Avatar, formatTime, formatDate, formatLastSeen, senderColor } from './helpers.jsx'
 
-const EMOJIS = ['👍','❤️','😂','😮','😢','🔥','👏','🎉','🤩','💯','👎','😍']
+const EMOJIS = ['👍','❤️','😂','😮','😢','🔥','👏','🎉','🤩','💯','👎','😍','🥳','💪','🙏','😎']
 
-// Check if last_seen is recent enough to show as online
+const EMOJI_CATEGORIES = {
+  '😊': ['😀','😃','😄','😁','😆','😅','😂','🤣','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😜','🤪','😝','🤑','🤗','🤭','🤫','🤔','🤐','🤨','😐','😑','😶','😏','😒','🙄','😬','🤥','😌','😔','😪','🤤','😴','😷','🤒','🤕','🤢','🤧','🥵','🥶','🥴','😵','🤯','🤠','🥳','😎','🤓','🧐'],
+  '👍': ['👋','🤚','🖐','✋','🖖','👌','🤌','🤏','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','🖕','👇','☝️','👍','👎','✊','👊','🤛','🤜','👏','🙌','👐','🤲','🙏','✍️','💅','🤳','💪','🦾'],
+  '❤️': ['❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','💟','☮️','✝️','☪️','🕉','✡️','🔯','🕎','☯️','☦️'],
+}
+
 function isReallyOnline(online, lastSeen) {
-  if (!online) return false
-  if (!lastSeen) return false
-  return (Date.now() - new Date(lastSeen)) < 3 * 60 * 1000 // 3 minutes
+  if (!online || !lastSeen) return false
+  return (Date.now() - new Date(lastSeen)) < 3 * 60 * 1000
+}
+
+// Parse @mentions in text
+function renderText(text, members, onMentionClick) {
+  if (!text) return null
+  const parts = text.split(/(@\w+)/g)
+  return parts.map((part, i) => {
+    if (part.startsWith('@')) {
+      const username = part.slice(1)
+      const member = Object.values(members).find(m => m.username === username)
+      if (member) return <span key={i} className="mention" onClick={() => onMentionClick(member)}>{part}</span>
+    }
+    return <span key={i}>{part}</span>
+  })
 }
 
 export default function ChatWindow({ chat, session, profile, visible, onBack, onRefresh, showToast, onViewUser }) {
@@ -24,8 +42,10 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
   const [curChat, setCurChat] = useState(chat)
   const [replyTo, setReplyTo] = useState(null)
   const [editingMsg, setEditingMsg] = useState(null)
+  const [forwardMsg, setForwardMsg] = useState(null)
   const [ctx, setCtx] = useState(null)
   const [reactions, setReactions] = useState({})
+  const [reads, setReads] = useState({}) // msgId -> [userId]
   const [pinnedMsg, setPinnedMsg] = useState(null)
   const [viewUser, setViewUser] = useState(null)
   const [pasteFile, setPasteFile] = useState(null)
@@ -33,6 +53,11 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
   const [searchQ, setSearchQ] = useState('')
   const [showScrollBtn, setShowScrollBtn] = useState(false)
   const [blockedIds, setBlockedIds] = useState([])
+  const [isRecording, setIsRecording] = useState(false)
+  const [typingUsers, setTypingUsers] = useState([])
+  const [showEmojiPicker, setShowEmojiPicker] = useState(false)
+  const [emojiCat, setEmojiCat] = useState('😊')
+  const [readsDetail, setReadsDetail] = useState(null) // msgId to show reads popup
   const bottomRef = useRef(null)
   const msgsRef = useRef(null)
   const taRef = useRef(null)
@@ -40,12 +65,14 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
   const chRef = useRef(null)
   const longPressTimer = useRef(null)
   const didScrollRef = useRef(false)
+  const recognitionRef = useRef(null)
+  const typingTimer = useRef(null)
 
   useEffect(() => {
     setCurChat(chat)
     if (!chat) return
     setMsgs([]); setReplyTo(null); setCtx(null); setPasteFile(null)
-    setEditingMsg(null); setSearchMode(false); setSearchQ('')
+    setEditingMsg(null); setSearchMode(false); setSearchQ(''); setTypingUsers([])
     didScrollRef.current = false
     loadMsgs(); loadMembers(); markRead(); loadBlocked()
 
@@ -59,12 +86,12 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
           else setMsgs(prev => prev.map(m => m.id === p.new.id ? p.new : m))
         })
       .on('postgres_changes', { event: '*', schema: 'public', table: 'reactions' }, loadReactions)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'message_reads' }, loadReads)
       .subscribe()
 
     return () => { if (chRef.current) supabase.removeChannel(chRef.current) }
   }, [chat?.id])
 
-  // Scroll to bottom when msgs load first time
   useEffect(() => {
     if (msgs.length && !didScrollRef.current) {
       didScrollRef.current = true
@@ -77,7 +104,6 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
     }
   }, [msgs])
 
-  // Auto-resize textarea
   useEffect(() => {
     if (taRef.current) {
       taRef.current.style.height = 'auto'
@@ -85,24 +111,17 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
     }
   }, [text])
 
-  // Close ctx on click
   useEffect(() => {
-    const h = () => setCtx(null)
+    const h = () => { setCtx(null); setShowEmojiPicker(false); setReadsDetail(null) }
     window.addEventListener('click', h)
     return () => window.removeEventListener('click', h)
   }, [])
 
-  // Paste image
   useEffect(() => {
     function onPaste(e) {
       if (!visible) return
-      const items = e.clipboardData?.items
-      if (!items) return
-      for (const item of items) {
-        if (item.type.startsWith('image/')) {
-          setPasteFile(item.getAsFile())
-          e.preventDefault(); break
-        }
+      for (const item of (e.clipboardData?.items || [])) {
+        if (item.type.startsWith('image/')) { setPasteFile(item.getAsFile()); e.preventDefault(); break }
       }
     }
     window.addEventListener('paste', onPaste)
@@ -120,20 +139,15 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
       .eq('chat_id', chat.id)
     if (data) {
       const map = {}
-      data.forEach(m => {
-        map[m.user_id] = { ...m.profiles, role: m.role }
-        if (m.user_id === session.user.id) setMyRole(m.role || 'member')
-      })
+      data.forEach(m => { map[m.user_id] = { ...m.profiles, role: m.role }; if (m.user_id === session.user.id) setMyRole(m.role || 'member') })
       setMembers(map)
     }
   }
 
   async function loadMsgs() {
-    const { data } = await supabase.from('messages').select('*')
-      .eq('chat_id', chat.id).eq('deleted', false)
-      .order('created_at', { ascending: true }).limit(300)
+    const { data } = await supabase.from('messages').select('*').eq('chat_id', chat.id).eq('deleted', false).order('created_at', { ascending: true }).limit(300)
     setMsgs(data || [])
-    loadReactions(); loadPinned()
+    loadReactions(); loadPinned(); loadReads()
   }
 
   async function loadReactions() {
@@ -143,12 +157,19 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
     const { data: r } = await supabase.from('reactions').select('*').in('message_id', m.map(x => x.id))
     if (!r) return
     const g = {}
-    r.forEach(x => {
-      if (!g[x.message_id]) g[x.message_id] = {}
-      if (!g[x.message_id][x.emoji]) g[x.message_id][x.emoji] = []
-      g[x.message_id][x.emoji].push(x.user_id)
-    })
+    r.forEach(x => { if (!g[x.message_id]) g[x.message_id] = {}; if (!g[x.message_id][x.emoji]) g[x.message_id][x.emoji] = []; g[x.message_id][x.emoji].push(x.user_id) })
     setReactions(g)
+  }
+
+  async function loadReads() {
+    if (!chat || chat.type !== 'group') return
+    const { data: m } = await supabase.from('messages').select('id').eq('chat_id', chat.id).eq('deleted', false)
+    if (!m?.length) return
+    const { data: r } = await supabase.from('message_reads').select('message_id,user_id').in('message_id', m.map(x => x.id))
+    if (!r) return
+    const g = {}
+    r.forEach(x => { if (!g[x.message_id]) g[x.message_id] = []; if (!g[x.message_id].includes(x.user_id)) g[x.message_id].push(x.user_id) })
+    setReads(g)
   }
 
   async function loadPinned() {
@@ -158,8 +179,17 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
   }
 
   async function markRead() {
-    await supabase.from('messages').update({ is_read: true })
-      .eq('chat_id', chat.id).neq('sender_id', session.user.id).eq('is_read', false)
+    if (!chat) return
+    await supabase.from('messages').update({ is_read: true }).eq('chat_id', chat.id).neq('sender_id', session.user.id).eq('is_read', false)
+    // Mark group reads
+    if (chat.type === 'group') {
+      const { data: unread } = await supabase.from('messages').select('id').eq('chat_id', chat.id).eq('deleted', false).neq('sender_id', session.user.id)
+      if (unread?.length) {
+        for (const msg of unread) {
+          await supabase.from('message_reads').upsert({ message_id: msg.id, user_id: session.user.id }, { onConflict: 'message_id,user_id', ignoreDuplicates: true })
+        }
+      }
+    }
   }
 
   async function send() {
@@ -179,28 +209,18 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
   async function saveEdit() {
     if (!editingMsg || !text.trim()) return
     await supabase.from('messages').update({ content: text.trim(), edited: true, edited_at: new Date().toISOString() }).eq('id', editingMsg.id)
-    setEditingMsg(null); setText(''); setSending(false)
-    showToast('Сообщение изменено ✓')
+    setEditingMsg(null); setText(''); setSending(false); showToast('Изменено ✓')
   }
 
   async function sendFileObj(file) {
     if (file.size > 50 * 1024 * 1024) { showToast('Макс. 50 МБ'); return }
-    const isImg = file.type.startsWith('image/')
-    const isVideo = file.type.startsWith('video/')
-    const isAudio = file.type.startsWith('audio/')
+    const isImg = file.type.startsWith('image/'), isVid = file.type.startsWith('video/'), isAud = file.type.startsWith('audio/')
     const fn = `${chat.id}/${Date.now()}_${file.name || 'file'}`
     const { error } = await supabase.storage.from('chat-files').upload(fn, file)
     if (error) { showToast('Ошибка загрузки'); return }
     const { data: { publicUrl } } = supabase.storage.from('chat-files').getPublicUrl(fn)
-    let fileType = 'file'
-    if (isImg) fileType = 'image'
-    else if (isVideo) fileType = 'video'
-    else if (isAudio) fileType = 'audio'
-    await supabase.from('messages').insert({
-      chat_id: chat.id, sender_id: session.user.id,
-      content: (isImg || isVideo) ? null : file.name,
-      file_url: publicUrl, file_type: fileType, is_read: false, deleted: false
-    })
+    const fileType = isImg ? 'image' : isVid ? 'video' : isAud ? 'audio' : 'file'
+    await supabase.from('messages').insert({ chat_id: chat.id, sender_id: session.user.id, content: (isImg || isVid) ? null : file.name, file_url: publicUrl, file_type: fileType, is_read: false, deleted: false })
   }
 
   async function pickAndSend(e) {
@@ -208,24 +228,28 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
     setSending(true); await sendFileObj(f); setSending(false); e.target.value = ''
   }
 
+  async function forwardTo(targetChatId) {
+    if (!forwardMsg) return
+    await supabase.from('messages').insert({
+      chat_id: targetChatId, sender_id: session.user.id,
+      content: forwardMsg.content, file_url: forwardMsg.file_url, file_type: forwardMsg.file_type,
+      forwarded_from: forwardMsg.sender_id, is_read: false, deleted: false
+    })
+    setForwardMsg(null); showToast('Переслано ✓')
+  }
+
   async function deleteMsgFn(msg) {
     await supabase.from('messages').update({ deleted: true, content: null, file_url: null }).eq('id', msg.id)
-    setMsgs(prev => prev.filter(m => m.id !== msg.id))
-    setCtx(null); showToast('Удалено')
+    setMsgs(prev => prev.filter(m => m.id !== msg.id)); setCtx(null); showToast('Удалено')
   }
 
-  async function startEdit(msg) {
-    setEditingMsg(msg); setText(msg.content || ''); setCtx(null)
-    setTimeout(() => taRef.current?.focus(), 100)
-  }
+  async function startEdit(msg) { setEditingMsg(msg); setText(msg.content || ''); setCtx(null); setTimeout(() => taRef.current?.focus(), 100) }
 
   async function pinMsgFn(msg) {
-    const newPinId = pinnedMsg?.id === msg.id ? null : msg.id
-    await supabase.from('chats').update({ pinned_message_id: newPinId }).eq('id', chat.id)
-    setCurChat(p => ({ ...p, pinned_message_id: newPinId }))
-    if (newPinId) { setPinnedMsg(msg); showToast('Закреплено 📌') }
-    else { setPinnedMsg(null); showToast('Откреплено') }
-    setCtx(null)
+    const newPin = pinnedMsg?.id === msg.id ? null : msg.id
+    await supabase.from('chats').update({ pinned_message_id: newPin }).eq('id', chat.id)
+    setCurChat(p => ({ ...p, pinned_message_id: newPin }))
+    setPinnedMsg(newPin ? msg : null); setCtx(null); showToast(newPin ? 'Закреплено 📌' : 'Откреплено')
   }
 
   async function toggleReaction(msgId, emoji) {
@@ -237,58 +261,66 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
 
   async function blockUser(userId) {
     await supabase.from('blocked_users').insert({ user_id: session.user.id, blocked_id: userId })
-    setBlockedIds(prev => [...prev, userId])
-    setCtx(null); showToast('Пользователь заблокирован')
+    setBlockedIds(prev => [...prev, userId]); setCtx(null); showToast('Заблокирован')
   }
 
   async function unblockUser(userId) {
     await supabase.from('blocked_users').delete().eq('user_id', session.user.id).eq('blocked_id', userId)
-    setBlockedIds(prev => prev.filter(id => id !== userId))
-    showToast('Разблокирован')
+    setBlockedIds(prev => prev.filter(id => id !== userId)); showToast('Разблокирован')
   }
 
-  // ── Touch handling for iOS/mobile ──
+  function insertMention(username) {
+    setText(p => p + '@' + username + ' ')
+    taRef.current?.focus()
+  }
+
+  // Voice input
+  function toggleVoice() {
+    if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) { showToast('Голосовой ввод не поддерживается в этом браузере'); return }
+    if (isRecording) { recognitionRef.current?.stop(); setIsRecording(false); return }
+    const SR = window.SpeechRecognition || window.webkitSpeechRecognition
+    const rec = new SR()
+    rec.lang = 'ru-RU'; rec.continuous = false; rec.interimResults = false
+    rec.onresult = e => { const t = e.results[0][0].transcript; setText(p => p + t) }
+    rec.onend = () => setIsRecording(false)
+    rec.onerror = () => { setIsRecording(false); showToast('Ошибка микрофона') }
+    recognitionRef.current = rec
+    rec.start(); setIsRecording(true)
+  }
+
+  // Touch events for messages
   function onMsgTouchStart(e, msg) {
-    e.stopPropagation()
     longPressTimer.current = setTimeout(() => {
       const touch = e.touches[0]
-      setCtx({ msg, x: Math.min(touch.clientX, window.innerWidth - 220), y: Math.min(touch.clientY - 10, window.innerHeight - 290) })
+      setCtx({ msg, x: Math.min(touch.clientX, window.innerWidth - 220), y: Math.min(touch.clientY - 10, window.innerHeight - 320) })
     }, 450)
   }
-  function onMsgTouchEnd() { if (longPressTimer.current) clearTimeout(longPressTimer.current) }
+  function onMsgTouchEnd() { clearTimeout(longPressTimer.current) }
 
   function onMsgRightClick(e, msg) {
     e.preventDefault(); e.stopPropagation()
-    setCtx({ msg, x: Math.min(e.clientX, window.innerWidth - 220), y: Math.min(e.clientY, window.innerHeight - 290) })
+    setCtx({ msg, x: Math.min(e.clientX, window.innerWidth - 220), y: Math.min(e.clientY, window.innerHeight - 320) })
   }
 
   function onKeyDown(e) {
-    // Ctrl+Enter or Cmd+Enter = send; Enter = new line
     if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') { e.preventDefault(); send() }
     if (e.key === 'Escape') { setReplyTo(null); setEditingMsg(null); setText('') }
+    // @mention autocomplete hint
   }
 
   function onScroll(e) {
     const el = e.target
-    const atBottom = el.scrollHeight - el.scrollTop - el.clientHeight < 100
-    setShowScrollBtn(!atBottom)
-  }
-
-  function scrollToBottom() {
-    bottomRef.current?.scrollIntoView({ behavior: 'smooth' })
-    setShowScrollBtn(false)
+    setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 150)
   }
 
   const canDel = m => m.sender_id === session.user.id || myRole === 'owner' || myRole === 'admin'
   const canPin = myRole === 'owner' || myRole === 'admin' || chat?.type === 'direct'
   const canEdit = m => m.sender_id === session.user.id && !m.file_type
 
-  // Filter messages by search
   const displayMsgs = searchMode && searchQ.trim()
     ? msgs.filter(m => m.content?.toLowerCase().includes(searchQ.toLowerCase()))
     : msgs
 
-  // Group by date
   const grouped = []
   let lastDate = null
   displayMsgs.forEach(msg => {
@@ -308,11 +340,9 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
   )
 
   const otherUser = chat.otherUser
-  const headerName = curChat?.name || chat.displayName
   const online = isReallyOnline(otherUser?.online, otherUser?.last_seen)
-  const headerStatus = chat.type === 'direct'
-    ? formatLastSeen(otherUser?.last_seen, online)
-    : `${Object.keys(members).length} участников`
+  const headerName = curChat?.name || chat.displayName
+  const headerStatus = chat.type === 'direct' ? formatLastSeen(otherUser?.last_seen, online) : `${Object.keys(members).length} участников`
 
   return (
     <div className={`chat-win mobile${visible ? ' visible' : ''}`}>
@@ -325,17 +355,23 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
         </div>
         <div className="chat-head-info">
           <div className="chat-head-name">{headerName}</div>
-          <div className={`chat-head-status${online ? ' on' : ''}`}>{headerStatus}</div>
+          <div className={`chat-head-status${online ? ' on' : ''}`}>
+            {typingUsers.length > 0
+              ? <span style={{ color: 'var(--accent2)' }}>печатает...</span>
+              : headerStatus
+            }
+          </div>
         </div>
-        <button className="ico-btn" onClick={e => { e.stopPropagation(); setSearchMode(p => !p) }} title="Поиск">🔍</button>
-        {chat.type === 'group' && <button className="ico-btn" onClick={e => { e.stopPropagation(); setShowGrpSettings(true) }}>⚙️</button>}
+        <button className="ico-btn" onClick={e => { e.stopPropagation(); setSearchMode(p => !p) }}>🔍</button>
+        {chat.type === 'group' && (
+          <button className="ico-btn" onClick={e => { e.stopPropagation(); setShowGrpSettings(true) }}>⚙️</button>
+        )}
       </div>
 
-      {/* Search bar */}
+      {/* Search */}
       {searchMode && (
         <div style={{ padding: '8px 14px', background: 'var(--bg3)', borderBottom: '1px solid var(--border)', display: 'flex', gap: 10, alignItems: 'center' }}>
-          <input className="f-input" style={{ flex: 1, padding: '8px 12px' }} placeholder="Поиск по сообщениям..." value={searchQ}
-            onChange={e => setSearchQ(e.target.value)} autoFocus />
+          <input className="f-input" style={{ flex: 1, padding: '8px 12px' }} placeholder="Поиск по сообщениям..." value={searchQ} onChange={e => setSearchQ(e.target.value)} autoFocus />
           <button className="reply-close" onClick={() => { setSearchMode(false); setSearchQ('') }}>×</button>
         </div>
       )}
@@ -352,13 +388,13 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
         </div>
       )}
 
-      {/* Reply / Edit bar */}
+      {/* Reply/Edit bar */}
       {(replyTo || editingMsg) && (
         <div className="reply-bar">
           <div className="reply-line" style={{ background: editingMsg ? '#f59e0b' : 'var(--accent)' }} />
           <div className="reply-info">
-            <div className="reply-who">{editingMsg ? '✏️ Редактирование' : members[replyTo.sender_id]?.full_name || 'Ответ'}</div>
-            <div className="reply-what">{editingMsg ? editingMsg.content : replyTo.content || (replyTo.file_type === 'image' ? '🖼 Фото' : '📎 Файл')}</div>
+            <div className="reply-who">{editingMsg ? '✏️ Редактирование' : (members[replyTo.sender_id]?.full_name || 'Ответ')}</div>
+            <div className="reply-what">{editingMsg ? editingMsg.content : (replyTo.content || '🖼 Фото')}</div>
           </div>
           <button className="reply-close" onClick={() => { setReplyTo(null); setEditingMsg(null); setText('') }}>×</button>
         </div>
@@ -368,39 +404,38 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
       {pasteFile && (
         <div className="paste-preview">
           <img src={URL.createObjectURL(pasteFile)} alt="" />
-          <div className="paste-preview-info">Фото вставлено — нажми ➤ чтобы отправить</div>
+          <div className="paste-preview-info">Фото вставлено — нажми ➤</div>
           <button className="paste-preview-close" onClick={() => setPasteFile(null)}>×</button>
         </div>
       )}
 
       {/* Messages */}
-      <div className="msgs" ref={msgsRef} onScroll={onScroll} onClick={() => setCtx(null)}>
-        {searchMode && searchQ && grouped.length === 0 && <div className="empty-hint">Ничего не найдено</div>}
-
+      <div className="msgs" ref={msgsRef} onScroll={onScroll} onClick={() => { setCtx(null); setShowEmojiPicker(false) }}>
         {grouped.map((item, i) => {
           if (item.type === 'date') return <div key={`d${i}`} className="date-sep">{formatDate(item.date)}</div>
 
           const sent = item.sender_id === session.user.id
           const sender = members[item.sender_id]
-          const isBlocked = blockedIds.includes(item.sender_id)
+          const isBlocked = blockedIds.includes(item.sender_id) && !sent
           const next = grouped[i + 1]
           const isLast = !next || next.type === 'date' || next.sender_id !== item.sender_id
           const rcts = reactions[item.id]
           const replyMsg = item.reply_to ? msgs.find(m => m.id === item.reply_to) : null
+          const msgReads = reads[item.id] || []
+          const readByOthers = msgReads.filter(uid => uid !== item.sender_id)
 
           return (
             <div key={item.id} className={`msg-row${sent ? ' s' : ' r'}${isLast ? ' gap' : ''}`}>
               <div className="msg-inner">
                 {!sent && (
                   isLast
-                    ? <div style={{ width: 30, height: 30, flexShrink: 0, alignSelf: 'flex-end', cursor: 'pointer' }}
-                        onClick={() => sender && sender.id !== session.user.id && setViewUser(sender)}>
+                    ? <div style={{ flexShrink: 0, alignSelf: 'flex-end', cursor: 'pointer' }} onClick={() => sender && sender.id !== session.user.id && setViewUser(sender)}>
                         <Avatar name={sender?.full_name} url={sender?.avatar_url} size={30} />
                       </div>
                     : <div className="msg-av-gap" />
                 )}
 
-                <div className={`bubble${sent ? ' s' : ' r'}${isBlocked ? '' : ''}`}
+                <div className={`bubble${sent ? ' s' : ' r'}`}
                   onContextMenu={e => onMsgRightClick(e, item)}
                   onTouchStart={e => onMsgTouchStart(e, item)}
                   onTouchEnd={onMsgTouchEnd}
@@ -408,7 +443,6 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
                   onDoubleClick={() => !isBlocked && setReplyTo(item)}
                   style={isBlocked ? { opacity: .4 } : {}}>
 
-                  {/* Group sender name */}
                   {chat.type === 'group' && !sent && isLast && sender && (
                     <div className="bubble-sender" style={{ color: senderColor(sender.full_name), cursor: 'pointer' }}
                       onClick={() => setViewUser(sender)}>
@@ -416,62 +450,85 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
                     </div>
                   )}
 
-                  {isBlocked && <div style={{ fontStyle: 'italic', fontSize: 13 }}>Сообщение от заблокированного пользователя</div>}
+                  {isBlocked && <div style={{ fontStyle: 'italic', fontSize: 13 }}>Сообщение заблокировано</div>}
 
                   {!isBlocked && <>
-                    {/* Reply */}
-                    {replyMsg && (
-                      <div className="bubble-reply">
-                        <div className="bubble-reply-who">{members[replyMsg.sender_id]?.full_name || '?'}</div>
-                        <div className="bubble-reply-text">{replyMsg.content || (replyMsg.file_type === 'image' ? '🖼 Фото' : '📎 Файл')}</div>
+                    {/* Forwarded */}
+                    {item.forwarded_from && (
+                      <div style={{ borderLeft: '3px solid rgba(255,255,255,.4)', paddingLeft: 8, marginBottom: 6, opacity: .8, fontSize: 12 }}>
+                        ↩ Переслано от {members[item.forwarded_from]?.full_name || 'пользователя'}
                       </div>
                     )}
 
-                    {/* Image */}
+                    {replyMsg && (
+                      <div className="bubble-reply">
+                        <div className="bubble-reply-who">{members[replyMsg.sender_id]?.full_name || '?'}</div>
+                        <div className="bubble-reply-text">{replyMsg.content || '🖼 Фото'}</div>
+                      </div>
+                    )}
+
                     {item.file_type === 'image' && item.file_url && (
                       <img className="bubble-img" src={item.file_url} alt="" onClick={() => setLightbox(item.file_url)} />
                     )}
-
-                    {/* Video */}
                     {item.file_type === 'video' && item.file_url && (
                       <video src={item.file_url} controls style={{ maxWidth: '100%', width: 280, borderRadius: 10, display: 'block', marginBottom: 4 }} />
                     )}
-
-                    {/* Audio */}
                     {item.file_type === 'audio' && item.file_url && (
                       <div style={{ minWidth: 220 }}>
                         <div style={{ fontSize: 12, opacity: .7, marginBottom: 4 }}>🎵 {item.content || 'Аудио'}</div>
                         <audio src={item.file_url} controls style={{ width: '100%' }} />
                       </div>
                     )}
-
-                    {/* File */}
                     {item.file_type === 'file' && item.file_url && (
                       <a className="bubble-file" href={item.file_url} target="_blank" rel="noreferrer">
                         <span className="bubble-file-icon">📎</span>
                         <div><div className="bubble-file-name">{item.content || 'Файл'}</div><div className="bubble-file-sub">Открыть</div></div>
                       </a>
                     )}
-
-                    {/* Text */}
-                    {item.content && !item.file_type && <span>{item.content}</span>}
+                    {item.content && !item.file_type && (
+                      <span>{renderText(item.content, members, setViewUser)}</span>
+                    )}
                   </>}
 
-                  {/* Meta */}
                   <div className="bubble-meta">
-                    {item.edited && <span style={{ fontStyle: 'italic', marginRight: 4 }}>изм.</span>}
+                    {item.edited && <span style={{ fontStyle: 'italic', marginRight: 4, fontSize: 10 }}>изм.</span>}
                     <span>{formatTime(item.created_at)}</span>
                     {sent && <span style={{ opacity: item.is_read ? 1 : .5 }}>{item.is_read ? '✓✓' : '✓'}</span>}
                   </div>
                 </div>
               </div>
 
+              {/* Group read receipts */}
+              {chat.type === 'group' && sent && readByOthers.length > 0 && (
+                <div className="reads-row" style={{ justifyContent: 'flex-end', paddingRight: 4 }}>
+                  {readByOthers.slice(0, 5).map(uid => {
+                    const m = members[uid]
+                    return m ? (
+                      <div key={uid} title={m.full_name} onClick={e => { e.stopPropagation(); setReadsDetail(readsDetail === item.id ? null : item.id) }}>
+                        {m.avatar_url
+                          ? <div className="reads-av"><img src={m.avatar_url} alt="" /></div>
+                          : <div className="reads-av-ph" style={{ background: senderColor(m.full_name) }}>{m.full_name[0]}</div>
+                        }
+                      </div>
+                    ) : null
+                  })}
+                  {readByOthers.length > 5 && <span style={{ fontSize: 11, color: 'var(--text3)' }}>+{readByOthers.length - 5}</span>}
+                </div>
+              )}
+
+              {/* Reads detail popup */}
+              {readsDetail === item.id && chat.type === 'group' && (
+                <div style={{ background: 'var(--bg3)', border: '1px solid var(--border)', borderRadius: 10, padding: 10, marginTop: 4, alignSelf: sent ? 'flex-end' : 'flex-start', fontSize: 13 }} onClick={e => e.stopPropagation()}>
+                  <div style={{ fontWeight: 700, marginBottom: 6, fontSize: 12, color: 'var(--text3)' }}>👁 Просмотрели:</div>
+                  {readByOthers.map(uid => <div key={uid} style={{ color: 'var(--text2)' }}>{members[uid]?.full_name || '?'}</div>)}
+                </div>
+              )}
+
               {/* Reactions */}
               {rcts && Object.keys(rcts).length > 0 && (
                 <div className="reactions" style={{ paddingLeft: sent ? 0 : 36, justifyContent: sent ? 'flex-end' : 'flex-start' }}>
                   {Object.entries(rcts).map(([emoji, users]) => (
-                    <button key={emoji} className={`reaction-btn${users.includes(session.user.id) ? ' mine' : ''}`}
-                      onClick={() => toggleReaction(item.id, emoji)}>
+                    <button key={emoji} className={`reaction-btn${users.includes(session.user.id) ? ' mine' : ''}`} onClick={() => toggleReaction(item.id, emoji)}>
                       {emoji}<span className="reaction-count">{users.length}</span>
                     </button>
                   ))}
@@ -480,17 +537,23 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
             </div>
           )
         })}
+
+        {/* Typing indicator */}
+        {typingUsers.length > 0 && (
+          <div className="typing-wrap">
+            <div className="typing-dots">
+              <div className="typing-dot" /><div className="typing-dot" /><div className="typing-dot" />
+            </div>
+            <div className="typing-text">печатает...</div>
+          </div>
+        )}
         <div ref={bottomRef} />
       </div>
 
-      {/* Scroll to bottom button */}
+      {/* Scroll button */}
       {showScrollBtn && (
-        <button onClick={scrollToBottom} style={{
-          position: 'absolute', bottom: 80, right: 16, width: 42, height: 42,
-          borderRadius: '50%', background: 'var(--bg3)', border: '1px solid var(--border)',
-          color: 'var(--text)', fontSize: 18, cursor: 'pointer', zIndex: 10,
-          boxShadow: '0 4px 12px rgba(0,0,0,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center'
-        }}>↓</button>
+        <button onClick={() => { bottomRef.current?.scrollIntoView({ behavior: 'smooth' }); setShowScrollBtn(false) }}
+          style={{ position: 'absolute', bottom: 80, right: 16, width: 42, height: 42, borderRadius: '50%', background: 'var(--bg3)', border: '1px solid var(--border)', color: 'var(--text)', fontSize: 18, cursor: 'pointer', zIndex: 10, boxShadow: '0 4px 12px rgba(0,0,0,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>↓</button>
       )}
 
       {/* Context menu */}
@@ -503,8 +566,12 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
             </div>
             <button className="ctx-item" onClick={() => { setReplyTo(ctx.msg); setCtx(null); taRef.current?.focus() }}>↩️ Ответить</button>
             {canEdit(ctx.msg) && <button className="ctx-item" onClick={() => startEdit(ctx.msg)}>✏️ Изменить</button>}
+            <button className="ctx-item" onClick={() => { setForwardMsg(ctx.msg); setCtx(null) }}>↗️ Переслать</button>
             {canPin && <button className="ctx-item" onClick={() => pinMsgFn(ctx.msg)}>📌 {pinnedMsg?.id === ctx.msg.id ? 'Открепить' : 'Закрепить'}</button>}
-            {!blockedIds.includes(ctx.msg.sender_id) && ctx.msg.sender_id !== session.user.id && (
+            {chat.type === 'group' && !ctx.msg.file_type && ctx.msg.content && (
+              <button className="ctx-item" onClick={() => { navigator.clipboard.writeText(ctx.msg.content); setCtx(null); showToast('Скопировано') }}>📋 Копировать</button>
+            )}
+            {ctx.msg.sender_id !== session.user.id && !blockedIds.includes(ctx.msg.sender_id) && (
               <button className="ctx-item danger" onClick={() => blockUser(ctx.msg.sender_id)}>🚫 Заблокировать</button>
             )}
             {canDel(ctx.msg) && <button className="ctx-item danger" onClick={() => deleteMsgFn(ctx.msg)}>🗑 Удалить</button>}
@@ -512,13 +579,47 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
         </>
       )}
 
+      {/* Emoji picker */}
+      {showEmojiPicker && (
+        <div className="emoji-picker" onClick={e => e.stopPropagation()}>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 8, borderBottom: '1px solid var(--border)', paddingBottom: 8 }}>
+            {Object.keys(EMOJI_CATEGORIES).map(cat => (
+              <button key={cat} onClick={() => setEmojiCat(cat)} style={{ background: emojiCat === cat ? 'var(--bg4)' : 'none', border: 'none', fontSize: 20, cursor: 'pointer', padding: '4px 8px', borderRadius: 8 }}>{cat}</button>
+            ))}
+          </div>
+          <div className="emoji-grid">
+            {(EMOJI_CATEGORIES[emojiCat] || []).map(e => (
+              <button key={e} onClick={() => { setText(p => p + e); setShowEmojiPicker(false); taRef.current?.focus() }}>{e}</button>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* Forward modal */}
+      {forwardMsg && (
+        <div className="overlay" onClick={e => e.target === e.currentTarget && setForwardMsg(null)}>
+          <div className="modal">
+            <div className="modal-head"><span className="modal-title">↗️ Переслать в...</span><button className="modal-close" onClick={() => setForwardMsg(null)}>×</button></div>
+            <div className="forward-list">
+              {/* Will be populated from parent - for now show simple list */}
+              <div className="empty-hint" style={{ padding: 20 }}>
+                <p style={{ marginBottom: 12 }}>Сообщение будет переслано</p>
+                <p style={{ fontSize: 13, color: 'var(--text3)' }}>Функция пересылки активна — выбери чат</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Input */}
       <div className="msg-input-area">
         <div className="msg-input-wrap">
+          <button className="attach-btn" onClick={e => { e.stopPropagation(); setShowEmojiPicker(p => !p) }}>😊</button>
           <button className="attach-btn" onClick={() => fileRef.current?.click()}>📎</button>
           <textarea ref={taRef} className="msg-textarea"
-            placeholder={editingMsg ? 'Редактирование...' : 'Сообщение... (Ctrl+Enter для отправки)'}
+            placeholder={isRecording ? '🎙 Запись...' : (editingMsg ? 'Редактирование...' : 'Сообщение... (Ctrl+Enter отправить)')}
             value={text} onChange={e => setText(e.target.value)} onKeyDown={onKeyDown} rows={1} />
+          <button className={`voice-btn${isRecording ? ' recording' : ''}`} onClick={toggleVoice} title="Голосовой ввод">🎙</button>
         </div>
         <button className="send-btn" onClick={send} disabled={(!text.trim() && !pasteFile) || sending}>
           {editingMsg ? '✓' : '➤'}
@@ -526,14 +627,13 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
         <input ref={fileRef} type="file" style={{ display: 'none' }} onChange={pickAndSend} accept="image/*,video/*,audio/*,.pdf,.doc,.docx,.zip,.txt" />
       </div>
 
-      {/* Lightbox */}
       {lightbox && <div className="lightbox" onClick={() => setLightbox(null)}><img src={lightbox} alt="" /></div>}
 
       {showGrpSettings && (
         <GroupSettingsModal chat={curChat} session={session} myRole={myRole}
           onClose={() => setShowGrpSettings(false)}
           onUpdated={u => { if (u) { setCurChat(p => ({ ...p, ...u })); onRefresh() } else { onBack(); onRefresh() } }}
-          onViewUser={setViewUser} showToast={showToast} />
+          onViewUser={setViewUser} showToast={showToast} members={members} onInsertMention={insertMention} />
       )}
 
       {viewUser && (
