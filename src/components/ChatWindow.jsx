@@ -110,8 +110,6 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
   const [blockedIds, setBlockedIds] = useState([])
   const [isRecording, setIsRecording] = useState(false)
   const [typingUsers, setTypingUsers] = useState([])
-  const [swipeOffset, setSwipeOffset] = useState({})
-  const swipeStartX = useRef({})
   const [showEmojiPicker, setShowEmojiPicker] = useState(false)
   const [emojiCat, setEmojiCat] = useState('😊')
   const [readsDetail, setReadsDetail] = useState(null) // msgId to show reads popup
@@ -381,23 +379,6 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
     setShowScrollBtn(el.scrollHeight - el.scrollTop - el.clientHeight > 150)
   }
 
-  function onSwipeStart(e, msgId) {
-    if (e.touches.length !== 1) return
-    swipeStartX.current[msgId] = e.touches[0].clientX
-  }
-  function onSwipeMove(e, msg) {
-    const sx = swipeStartX.current[msg.id]
-    if (sx === undefined) return
-    const dx = Math.max(0, Math.min(e.touches[0].clientX - sx, 72))
-    if (dx > 4) setSwipeOffset(p => ({ ...p, [msg.id]: dx }))
-  }
-  function onSwipeEnd(e, msg) {
-    const off = swipeOffset[msg.id] || 0
-    if (off > 48) { setReplyTo(msg); taRef.current?.focus() }
-    setSwipeOffset(p => ({ ...p, [msg.id]: 0 }))
-    delete swipeStartX.current[msg.id]
-  }
-
 
   const canDel = m => m.sender_id === session.user.id || myRole === 'owner' || myRole === 'admin'
   const canPin = myRole === 'owner' || myRole === 'admin' || chat?.type === 'direct'
@@ -512,11 +493,7 @@ export default function ChatWindow({ chat, session, profile, visible, onBack, on
 
           return (
             <div key={item.id} className={`msg-row${sent ? ' s' : ' r'}${isLast ? ' gap' : ''}`}>
-              <div className="msg-inner"
-                style={{ transform:`translateX(${swipeOffset[item.id]||0}px)`, transition:(swipeOffset[item.id]||0)>2?'none':'transform .2s ease' }}
-                onTouchStart={e=>onSwipeStart(e,item.id)}
-                onTouchMove={e=>onSwipeMove(e,item)}
-                onTouchEnd={e=>onSwipeEnd(e,item)}>
+              <div className="msg-inner">
                 {!sent && (
                   isLast
                     ? <div style={{ flexShrink: 0, alignSelf: 'flex-end', cursor: 'pointer' }} onClick={() => sender && sender.id !== session.user.id && setViewUser(sender)}>

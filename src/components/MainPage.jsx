@@ -162,7 +162,9 @@ export default function MainPage({ session, profile, onProfileUpdate }) {
     showToast(isOwner && chat?.type === 'group' ? 'Группа удалена' : 'Чат удалён')
   }
 
-  function pinChat(chatId, pinned) {
+  async function pinChat(chatId, pinned) {
+    // Save to DB so it persists after reload
+    await supabase.from('chats').update({ pinned }).eq('id', chatId)
     setChats(prev => prev.map(c => c.id === chatId ? { ...c, pinned } : c))
   }
 

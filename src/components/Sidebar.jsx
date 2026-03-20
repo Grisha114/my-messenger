@@ -62,7 +62,6 @@ export default function Sidebar({ profile, chats, activeChat, onSelect, onNewCha
         <div className="sidebar-head">
           <span className="logo">💬 GrishaChat</span>
           <button className="ico-btn" onClick={onFavorites} title="Избранное">⭐</button>
-          <button className="ico-btn" onClick={onSuggestions} title="Предложения">💡</button>
           <button className="ico-btn" onClick={onNewChat} title="Новый чат">✏️</button>
           <button className="ico-btn" onClick={onAdminClick} title="Инвайты">🔑</button>
           <button className="ico-btn" onClick={onSettings} title="Настройки">⚙️</button>
