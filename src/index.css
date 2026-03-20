@@ -28,7 +28,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-se
 
 .search-wrap { padding:10px 12px; flex-shrink:0; position:relative; }
 .search-icon { position:absolute; left:22px; top:50%; transform:translateY(-50%); color:var(--text3); font-size:14px; pointer-events:none; }
-.search-inp { width:100%; padding:9px 14px 9px 36px; background:var(--bg3); border:1px solid var(--border); border-radius:12px; color:var(--text); font-size:14px; outline:none; transition:border-color .2s; }
+.search-inp { width:100%; padding:9px 14px 9px 36px; background:var(--bg3); border:1px solid var(--border); border-radius:12px; color:var(--text); font-size:16px; outline:none; transition:border-color .2s; -webkit-appearance:none; }
 .search-inp:focus { border-color:var(--accent); }
 .search-inp::placeholder { color:var(--text3); }
 
@@ -48,7 +48,7 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-se
 .chat-row-time { font-size:12px; color:var(--text3); }
 .badge { background:var(--accent); color:#fff; border-radius:10px; padding:1px 7px; font-size:11px; font-weight:700; min-width:20px; text-align:center; }
 
-.sidebar-foot { padding:10px 14px; border-top:1px solid var(--border); display:flex; align-items:center; gap:10px; flex-shrink:0; }
+.sidebar-foot { padding:10px 14px; padding-bottom:max(10px, env(safe-area-inset-bottom)); border-top:1px solid var(--border); display:flex; align-items:center; gap:10px; flex-shrink:0; }
 .foot-av { cursor:pointer; }
 .foot-name { flex:1; min-width:0; cursor:pointer; }
 .foot-name .name { font-weight:600; font-size:14px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
@@ -141,10 +141,10 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-se
 .ctx-item.danger { color:#fca5a5; }
 
 /* Message input */
-.msg-input-area { padding:10px 14px; background:var(--bg2); border-top:1px solid var(--border); display:flex; align-items:flex-end; gap:10px; flex-shrink:0; }
+.msg-input-area { padding:10px 14px; padding-bottom:max(10px, env(safe-area-inset-bottom)); background:var(--bg2); border-top:1px solid var(--border); display:flex; align-items:flex-end; gap:10px; flex-shrink:0; }
 .msg-input-wrap { flex:1; display:flex; align-items:flex-end; gap:8px; background:var(--bg3); border:1.5px solid var(--border); border-radius:22px; padding:10px 14px; transition:border-color .2s; }
 .msg-input-wrap:focus-within { border-color:var(--accent); }
-.msg-textarea { flex:1; background:none; border:none; outline:none; color:var(--text); font-size:15px; font-family:inherit; resize:none; min-height:22px; max-height:140px; line-height:1.5; }
+.msg-textarea { flex:1; background:none; border:none; outline:none; color:var(--text); font-size:16px; font-family:inherit; resize:none; min-height:22px; max-height:140px; line-height:1.5; -webkit-appearance:none; }
 .msg-textarea::placeholder { color:var(--text3); }
 .attach-btn { background:none; border:none; color:var(--text3); font-size:20px; cursor:pointer; padding:0; flex-shrink:0; transition:color .2s; line-height:1; }
 .attach-btn:hover { color:var(--accent2); }
@@ -181,8 +181,19 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-se
 .emoji-grid button:hover { background:var(--bg4); }
 
 /* Modals */
-.overlay { position:fixed; inset:0; background:rgba(0,0,0,.75); backdrop-filter:blur(6px); z-index:100; display:flex; align-items:center; justify-content:center; padding:16px; }
-.modal { background:var(--bg2); border:1px solid var(--border); border-radius:22px; padding:28px; width:100%; max-width:420px; max-height:88vh; overflow-y:auto; box-shadow:var(--shadow); animation:modalIn .2s ease; }
+.overlay { 
+  position:fixed; inset:0; background:rgba(0,0,0,.75); 
+  backdrop-filter:blur(6px); -webkit-backdrop-filter:blur(6px);
+  z-index:100; display:flex; align-items:center; justify-content:center; 
+  padding:env(safe-area-inset-top, 16px) 16px env(safe-area-inset-bottom, 16px);
+}
+.modal { 
+  background:var(--bg2); border:1px solid var(--border); border-radius:22px; 
+  padding:24px; width:100%; max-width:420px; 
+  max-height:calc(100dvh - 40px); max-height:calc(100vh - 40px);
+  overflow-y:auto; -webkit-overflow-scrolling:touch;
+  box-shadow:var(--shadow); animation:modalIn .2s ease;
+}
 .modal.wide { max-width:500px; }
 @keyframes modalIn{from{opacity:0;transform:translateY(16px)}to{opacity:1;transform:translateY(0)}}
 .modal-head { display:flex; align-items:center; justify-content:space-between; margin-bottom:22px; }
@@ -191,13 +202,14 @@ body { font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',system-ui,sans-se
 .modal-close:hover { color:var(--text); }
 
 /* Tabs */
-.tabs { display:flex; border-bottom:1px solid var(--border); margin:0 -28px 22px; overflow-x:auto; }
+.tabs { display:flex; border-bottom:1px solid var(--border); margin:0 -24px 22px; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+.tabs::-webkit-scrollbar { display:none; }
 .tab { flex-shrink:0; padding:11px 14px; background:none; border:none; border-bottom:2px solid transparent; color:var(--text2); font-size:13px; font-weight:500; cursor:pointer; transition:all .2s; white-space:nowrap; }
 .tab.on { color:var(--accent2); border-bottom-color:var(--accent); }
 
 /* Form */
 .f-label { display:block; font-size:13px; color:var(--text2); margin-bottom:7px; font-weight:500; }
-.f-input { width:100%; padding:13px 15px; background:var(--bg3); border:1.5px solid var(--border); border-radius:13px; color:var(--text); font-size:15px; outline:none; transition:border-color .2s; font-family:inherit; }
+.f-input { width:100%; padding:13px 15px; background:var(--bg3); border:1.5px solid var(--border); border-radius:13px; color:var(--text); font-size:16px; outline:none; transition:border-color .2s; font-family:inherit; -webkit-appearance:none; }
 .f-input:focus { border-color:var(--accent); }
 .f-input::placeholder { color:var(--text3); }
 .f-input:disabled { opacity:.5; cursor:not-allowed; }
@@ -351,3 +363,18 @@ textarea.f-input { resize:vertical; min-height:70px; }
 
 /* ── EXAM HELPER badge ── */
 .hidden-badge { display:inline-block; background:rgba(239,68,68,.15); color:#fca5a5; font-size:10px; padding:1px 6px; border-radius:6px; margin-left:6px; vertical-align:middle; }
+
+/* ── iOS TOUCH FEEDBACK ── */
+.sett-row.clickable:active { background:var(--bg4) !important; }
+.chat-row:active { background:var(--bg3); }
+.ctx-item:active { background:var(--bg4); }
+.btn-primary:active { opacity:.85; }
+.ico-btn:active { background:var(--bg4); }
+
+/* ── iOS VIEWPORT FIX ── */
+@supports (-webkit-touch-callout: none) {
+  .app { height:100dvh; height:-webkit-fill-available; }
+  .chat-win.mobile { height:100dvh; height:-webkit-fill-available; }
+  .sidebar { height:100dvh; height:-webkit-fill-available; }
+  .modal { max-height:85dvh; }
+}

@@ -205,8 +205,7 @@ export default function MainPage({ session, profile, onProfileUpdate }) {
     // Send welcome message
     await supabase.from('messages').insert({
       chat_id: chat.id, sender_id: session.user.id,
-      content: '👋 Привет! Это чат для предложений по улучшению GrishaChat.
-Пиши свои идеи — Гриша их увидит!',
+      content: `👋 Привет! Это чат для предложений по улучшению GrishaChat.\nПиши свои идеи — Гриша их увидит!`,
       is_read: false, deleted: false
     })
 

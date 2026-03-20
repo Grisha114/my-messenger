@@ -243,7 +243,8 @@ export function SettingsModal({ profile, session, onClose, onUpdate, showToast, 
 
   function Row({icon, label, value, onClick, danger}) {
     return (
-      <div className={`sett-row${danger?' danger':''}`} onClick={onClick}>
+      <div className={`sett-row${danger?' danger':''}${onClick?' clickable':''}`} onClick={onClick}
+        style={{cursor:onClick?'pointer':'default'}}>
         <span className="sett-icon">{icon}</span>
         <span className="sett-label">{label}</span>
         {value&&<span className="sett-val">{value}</span>}
