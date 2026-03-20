@@ -6,6 +6,23 @@ import ProfileModal, { UserProfileModal, AdminModal, SettingsModal } from './Pro
 import NewChatModal from './NewChatModal'
 import { Avatar } from './helpers.jsx'
 
+// Request browser push notification permission
+async function requestNotifPermission() {
+  if (!('Notification' in window)) return false
+  if (Notification.permission === 'granted') return true
+  if (Notification.permission === 'denied') return false
+  const result = await Notification.requestPermission()
+  return result === 'granted'
+}
+
+function showBrowserNotif(title, body, icon) {
+  if (Notification.permission !== 'granted') return
+  if (document.hasFocus()) return // don't show if tab is active
+  try {
+    new Notification(title, { body, icon: icon || '/icon-192.png', badge: '/icon-192.png', tag: 'grishachat-msg', renotify: true })
+  } catch(e) {}
+}
+
 export default function MainPage({ session, profile, onProfileUpdate }) {
   const [chats, setChats] = useState([])
   const [activeChat, setActiveChat] = useState(null)
@@ -17,41 +34,55 @@ export default function MainPage({ session, profile, onProfileUpdate }) {
   const toastTimer = useRef(null)
   const notifTimer = useRef(null)
   const activeChatRef = useRef(null)
+  const myChatsRef = useRef([])
 
-  // Keep ref in sync so realtime handler can read current chat
   useEffect(() => { activeChatRef.current = activeChat }, [activeChat])
+  useEffect(() => { myChatsRef.current = chats.map(c => c.id) }, [chats])
 
   useEffect(() => {
     loadChats()
     setOnline(true)
-    const iv = setInterval(updateSeen, 25000)
-    const unload = () => setOnline(false)
-    window.addEventListener('beforeunload', unload)
+    requestNotifPermission()
 
-    // Realtime: refresh sidebar + show notifications
+    const iv = setInterval(updateSeen, 25000)
+
+    // Visibility change = online/offline
+    const onVis = () => {
+      if (document.hidden) setOnline(false)
+      else { setOnline(true); loadChats() }
+    }
+    document.addEventListener('visibilitychange', onVis)
+    window.addEventListener('beforeunload', () => setOnline(false))
+
+    // Realtime: only messages in MY chats
     const ch = supabase.channel('main-rt')
-      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async (payload) => {
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'messages' }, async p => {
+        const msg = p.new
+        // Only care about chats I'm in
+        if (!myChatsRef.current.includes(msg.chat_id)) return
         loadChats()
-        const msg = payload.new
-        // Don't notify for own messages or if chat is open
+        // Not my message, not in current chat
         if (msg.sender_id === session.user.id) return
         if (activeChatRef.current?.id === msg.chat_id) return
 
-        // Get sender info for notification
-        const { data: sender } = await supabase.from('profiles').select('full_name, avatar_url').eq('id', msg.sender_id).single()
-        if (sender) {
-          showNotif({
-            name: sender.full_name,
-            avatar: sender.avatar_url,
-            text: msg.file_type === 'image' ? '🖼 Фото' : msg.file_type === 'file' ? '📎 Файл' : msg.content,
-            chatId: msg.chat_id
-          })
-        }
+        const { data: sender } = await supabase.from('profiles').select('full_name,avatar_url').eq('id', msg.sender_id).single()
+        if (!sender) return
+
+        const text = msg.file_type === 'image' ? '🖼 Фото' : msg.file_type === 'file' ? '📎 Файл' : msg.content
+        const chatName = chats.find(c => c.id === msg.chat_id)?.displayName || ''
+
+        // In-app notification banner
+        setNotif({ name: sender.full_name, avatar: sender.avatar_url, text, chatId: msg.chat_id, chatName })
+        if (notifTimer.current) clearTimeout(notifTimer.current)
+        notifTimer.current = setTimeout(() => setNotif(null), 5000)
+
+        // Browser push notification (works when tab not focused)
+        showBrowserNotif(`${sender.full_name}${chatName ? ` • ${chatName}` : ''}`, text, sender.avatar_url)
       })
       .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'profiles' }, loadChats)
       .subscribe()
 
-    return () => { clearInterval(iv); unload(); supabase.removeChannel(ch) }
+    return () => { clearInterval(iv); document.removeEventListener('visibilitychange', onVis); supabase.removeChannel(ch) }
   }, [])
 
   async function setOnline(v) {
@@ -77,6 +108,12 @@ export default function MainPage({ session, profile, onProfileUpdate }) {
       const others = (members || []).filter(m => m.user_id !== session.user.id).map(m => ({ ...m.profiles, role: m.role }))
       const me = (members || []).find(m => m.user_id === session.user.id)
       const last = lastArr?.[0] || null
+
+      // Real online check
+      const otherUser = chat.type === 'direct' ? others[0] : null
+      const reallyOnline = otherUser && otherUser.online && otherUser.last_seen &&
+        (Date.now() - new Date(otherUser.last_seen)) < 3 * 60 * 1000
+
       return {
         ...chat,
         otherMembers: others,
@@ -85,8 +122,8 @@ export default function MainPage({ session, profile, onProfileUpdate }) {
         unread: unread || 0,
         displayName: chat.type === 'group' ? chat.name : (others[0]?.full_name || '?'),
         displayAvatar: chat.type === 'group' ? chat.avatar_url : others[0]?.avatar_url,
-        isOnline: chat.type === 'direct' && others[0]?.online,
-        otherUser: chat.type === 'direct' ? others[0] : null,
+        isOnline: reallyOnline,
+        otherUser,
       }
     }))
 
@@ -100,17 +137,13 @@ export default function MainPage({ session, profile, onProfileUpdate }) {
     toastTimer.current = setTimeout(() => setToast(null), 2600)
   }
 
-  function showNotif(data) {
-    if (notifTimer.current) clearTimeout(notifTimer.current)
-    setNotif(data)
-    notifTimer.current = setTimeout(() => setNotif(null), 4000)
-  }
-
   function openChat(chat) { setActiveChat(chat); setShowChat(true) }
   function closeChat() { setShowChat(false); setTimeout(() => setActiveChat(null), 300); loadChats() }
 
+  // Delete = leave chat (remove from chat_members permanently)
   async function deleteChat(chatId) {
-    await supabase.from('chat_members').delete().eq('chat_id', chatId).eq('user_id', session.user.id)
+    const { error } = await supabase.from('chat_members').delete().eq('chat_id', chatId).eq('user_id', session.user.id)
+    if (error) { showToast('Ошибка удаления'); return }
     setChats(prev => prev.filter(c => c.id !== chatId))
     if (activeChat?.id === chatId) closeChat()
     showToast('Чат удалён')
@@ -120,10 +153,18 @@ export default function MainPage({ session, profile, onProfileUpdate }) {
     setChats(prev => prev.map(c => c.id === chatId ? { ...c, pinned } : c))
   }
 
-  function openNotifChat(chatId) {
-    setNotif(null)
-    const chat = chats.find(c => c.id === chatId)
-    if (chat) openChat(chat)
+  // Create favorites chat
+  async function createFavorites() {
+    // Check if already exists
+    const existing = chats.find(c => c.is_favorite)
+    if (existing) { openChat(existing); return }
+
+    const { data: chat } = await supabase.from('chats').insert({
+      type: 'direct', name: 'Избранное', created_by: session.user.id, is_favorite: true
+    }).select().single()
+    await supabase.from('chat_members').insert([{ chat_id: chat.id, user_id: session.user.id, role: 'owner' }])
+    loadChats()
+    openChat({ ...chat, displayName: '⭐ Избранное', type: 'direct', myRole: 'owner' })
   }
 
   return (
@@ -135,6 +176,7 @@ export default function MainPage({ session, profile, onProfileUpdate }) {
         onAdminClick={() => setModal('admin')}
         onSettings={() => setModal('settings')}
         onDeleteChat={deleteChat} onPinChat={pinChat}
+        onFavorites={createFavorites}
         hidden={showChat}
       />
       <ChatWindow
@@ -146,17 +188,15 @@ export default function MainPage({ session, profile, onProfileUpdate }) {
       {modal === 'profile' && <ProfileModal profile={profile} session={session} onClose={() => setModal(null)} onUpdate={onProfileUpdate} showToast={showToast} />}
       {modal === 'admin' && <AdminModal profile={profile} session={session} onClose={() => setModal(null)} showToast={showToast} />}
       {modal === 'newchat' && <NewChatModal session={session} profile={profile} onClose={() => setModal(null)} onCreated={c => { loadChats(); openChat(c); setModal(null) }} showToast={showToast} />}
-      {modal === 'settings' && <SettingsModal profile={profile} session={session} onClose={() => setModal(null)} onUpdate={onProfileUpdate} showToast={showToast} />}
+      {modal === 'settings' && <SettingsModal profile={profile} session={session} onClose={() => setModal(null)} onUpdate={onProfileUpdate} showToast={showToast} chats={chats} />}
       {viewUser && <UserProfileModal user={viewUser} session={session} onClose={() => setViewUser(null)} onStartChat={c => { setViewUser(null); openChat(c) }} showToast={showToast} />}
 
       {toast && <div className="toast">{toast}</div>}
 
-      {/* In-app notification banner */}
+      {/* In-app notification — only for current user, filtered correctly */}
       {notif && (
-        <div className="notif-banner" style={{ cursor: 'pointer' }} onClick={() => openNotifChat(notif.chatId)}>
-          <div className="notif-av">
-            <Avatar name={notif.name} url={notif.avatar} size={44} />
-          </div>
+        <div className="notif-banner" onClick={() => { const c = chats.find(x => x.id === notif.chatId); if (c) openChat(c); setNotif(null) }}>
+          <div className="notif-av"><Avatar name={notif.name} url={notif.avatar} size={44} /></div>
           <div className="notif-body">
             <div className="notif-name">{notif.name}</div>
             <div className="notif-text">{notif.text}</div>

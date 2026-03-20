@@ -1,8 +1,8 @@
-import { useState, useRef, useCallback } from 'react'
+import { useState, useRef } from 'react'
 import { supabase } from '../supabase'
 import { Avatar, formatSidebarTime } from './helpers.jsx'
 
-export default function Sidebar({ profile, chats, activeChat, onSelect, onNewChat, onProfileClick, onAdminClick, onSettings, onDeleteChat, onPinChat, hidden }) {
+export default function Sidebar({ profile, chats, activeChat, onSelect, onNewChat, onProfileClick, onAdminClick, onSettings, onDeleteChat, onPinChat, onFavorites, hidden }) {
   const [search, setSearch] = useState('')
   const [ctx, setCtx] = useState(null)
   const longPressTimer = useRef(null)
@@ -12,23 +12,18 @@ export default function Sidebar({ profile, chats, activeChat, onSelect, onNewCha
     await supabase.auth.signOut()
   }
 
-  // Desktop right-click
   function onRightClick(e, chat) {
     e.preventDefault(); e.stopPropagation()
-    setCtx({ chat, x: Math.min(e.clientX, window.innerWidth - 210), y: Math.min(e.clientY, window.innerHeight - 130) })
+    setCtx({ chat, x: Math.min(e.clientX, window.innerWidth - 210), y: Math.min(e.clientY, window.innerHeight - 150) })
   }
 
-  // Mobile long press
   function onTouchStart(e, chat) {
     longPressTimer.current = setTimeout(() => {
       const touch = e.touches[0]
-      setCtx({ chat, x: Math.min(touch.clientX, window.innerWidth - 210), y: Math.min(touch.clientY, window.innerHeight - 130) })
+      setCtx({ chat, x: Math.min(touch.clientX, window.innerWidth - 210), y: Math.min(touch.clientY, window.innerHeight - 150) })
     }, 500)
   }
-
-  function onTouchEnd() {
-    if (longPressTimer.current) clearTimeout(longPressTimer.current)
-  }
+  function onTouchEnd() { if (longPressTimer.current) clearTimeout(longPressTimer.current) }
 
   const filtered = chats
     .filter(c => c.displayName?.toLowerCase().includes(search.toLowerCase()))
@@ -37,6 +32,8 @@ export default function Sidebar({ profile, chats, activeChat, onSelect, onNewCha
   function previewText(c) {
     if (!c.lastMsg) return 'Нет сообщений'
     if (c.lastMsg.file_type === 'image') return '🖼 Фото'
+    if (c.lastMsg.file_type === 'video') return '🎥 Видео'
+    if (c.lastMsg.file_type === 'audio') return '🎵 Аудио'
     if (c.lastMsg.file_type === 'file') return '📎 Файл'
     return c.lastMsg.content || ''
   }
@@ -46,6 +43,7 @@ export default function Sidebar({ profile, chats, activeChat, onSelect, onNewCha
       <div className={`sidebar${hidden ? ' hidden' : ''}`}>
         <div className="sidebar-head">
           <span className="logo">💬 GrishaChat</span>
+          <button className="ico-btn" onClick={onFavorites} title="Избранное">⭐</button>
           <button className="ico-btn" onClick={onNewChat} title="Новый чат">✏️</button>
           <button className="ico-btn" onClick={onAdminClick} title="Инвайты">🔑</button>
           <button className="ico-btn" onClick={onSettings} title="Настройки">⚙️</button>
@@ -53,25 +51,27 @@ export default function Sidebar({ profile, chats, activeChat, onSelect, onNewCha
 
         <div className="search-wrap">
           <span className="search-icon">🔍</span>
-          <input className="search-inp" placeholder="Поиск..." value={search} onChange={e => setSearch(e.target.value)} />
+          <input className="search-inp" placeholder="Поиск чатов..." value={search} onChange={e => setSearch(e.target.value)} />
         </div>
 
         <div className="chat-list">
-          {filtered.length === 0 && <div className="empty-hint">{search ? 'Ничего не найдено' : 'Нажми ✏️ чтобы начать'}</div>}
+          {filtered.length === 0 && (
+            <div className="empty-hint">{search ? 'Ничего не найдено' : 'Нажми ✏️ чтобы начать'}</div>
+          )}
           {filtered.map(chat => (
             <div key={chat.id}
-              className={`chat-row${activeChat?.id === chat.id ? ' active' : ''}${chat.pinned ? ' pinned' : ''}`}
+              className={`chat-row${activeChat?.id === chat.id ? ' active' : ''}`}
               onClick={() => { if (!ctx) onSelect(chat) }}
               onContextMenu={e => onRightClick(e, chat)}
               onTouchStart={e => onTouchStart(e, chat)}
               onTouchEnd={onTouchEnd}
               onTouchMove={onTouchEnd}
             >
-              <Avatar name={chat.displayName} url={chat.displayAvatar} online={chat.isOnline} size={48} />
+              <Avatar name={chat.is_favorite ? 'Избранное' : chat.displayName} url={chat.displayAvatar} online={chat.isOnline} size={48} />
               <div className="chat-row-info">
                 <div className="chat-row-name">
-                  {chat.pinned && <span style={{ fontSize: 12, marginRight: 4 }}>📌</span>}
-                  {chat.displayName}
+                  {chat.pinned && <span style={{ fontSize: 11, marginRight: 3 }}>📌</span>}
+                  {chat.is_favorite ? '⭐ Избранное' : chat.displayName}
                 </div>
                 <div className="chat-row-preview">{previewText(chat)}</div>
               </div>

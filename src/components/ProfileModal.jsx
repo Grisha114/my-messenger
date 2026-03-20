@@ -49,7 +49,7 @@ export function ProfileModal({ profile, session, onClose, onUpdate, showToast })
 export default ProfileModal
 
 /* ─── USER PROFILE (other user) ─────────── */
-export function UserProfileModal({ user, session, onClose, onStartChat, showToast }) {
+export function UserProfileModal({ user, session, onClose, onStartChat, onBlock, onUnblock, isBlocked, showToast }) {
   const [loading, setLoading] = useState(false)
 
   async function startChat() {
@@ -67,6 +67,13 @@ export function UserProfileModal({ user, session, onClose, onStartChat, showToas
     setLoading(false)
   }
 
+  function copyUsername() {
+    navigator.clipboard.writeText('@'+user.username)
+    showToast('Username скопирован ✓')
+  }
+
+  const reallyOnline = user.online && user.last_seen && (Date.now()-new Date(user.last_seen))<3*60*1000
+
   return (
     <div className="overlay" onClick={e=>e.target===e.currentTarget&&onClose()}>
       <div className="modal" style={{textAlign:'center'}}>
@@ -75,10 +82,21 @@ export function UserProfileModal({ user, session, onClose, onStartChat, showToas
           {user.avatar_url?<img src={user.avatar_url} alt=""/>:(user.full_name||'?')[0].toUpperCase()}
         </div>
         <h2 style={{fontSize:22,fontWeight:700,marginBottom:4}}>{user.full_name}</h2>
-        <p style={{color:'var(--text3)',fontSize:14,marginBottom:6}}>@{user.username}</p>
-        <p style={{fontSize:13,color:user.online?'var(--green)':'var(--text2)',marginBottom:20}}>{formatLastSeen(user.last_seen,user.online)}</p>
+        <div style={{display:'flex',alignItems:'center',justifyContent:'center',gap:8,marginBottom:6}}>
+          <p style={{color:'var(--text3)',fontSize:14}}>@{user.username}</p>
+          <button onClick={copyUsername} style={{background:'none',border:'none',color:'var(--accent2)',cursor:'pointer',fontSize:14}} title="Скопировать">📋</button>
+        </div>
+        <p style={{fontSize:13,color:reallyOnline?'var(--green)':'var(--text2)',marginBottom:20}}>{formatLastSeen(user.last_seen,reallyOnline)}</p>
         {user.bio&&<div style={{background:'var(--bg3)',borderRadius:12,padding:'12px 16px',marginBottom:20,textAlign:'left'}}><p style={{fontSize:13,color:'var(--text2)',marginBottom:4}}>О себе</p><p>{user.bio}</p></div>}
-        {user.id!==session.user.id&&<button className="btn-primary" onClick={startChat} disabled={loading}>{loading?'Открытие...':'💬 Написать'}</button>}
+        {user.id!==session.user.id&&(
+          <div style={{display:'flex',flexDirection:'column',gap:10}}>
+            <button className="btn-primary" onClick={startChat} disabled={loading}>{loading?'Открытие...':'💬 Написать'}</button>
+            {isBlocked
+              ? <button className="btn-sm btn-ghost" onClick={()=>{onUnblock&&onUnblock(user.id);onClose()}} style={{width:'100%',padding:12}}>🔓 Разблокировать</button>
+              : <button className="btn-sm" onClick={()=>{onBlock&&onBlock(user.id);onClose()}} style={{width:'100%',padding:12,background:'rgba(239,68,68,.1)',color:'#fca5a5',border:'none',borderRadius:10}}>🚫 Заблокировать</button>
+            }
+          </div>
+        )}
       </div>
     </div>
   )
